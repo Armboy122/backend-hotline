@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Build output
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temp files
+*.tmp
+*.log
+.DS_Store
+
+# Documentation
+README.md
+*.md
+docs/
+
+# Test files
+*_test.go
+test/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Migration scripts
+cmd/migrate/
+cmd/test-read/

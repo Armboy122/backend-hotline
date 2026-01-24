@@ -1,0 +1,40 @@
+server:
+  port: 8080
+  mode: debug # debug, release
+
+database:
+  host: ep-sweet-hill-a1a76thg.ap-southeast-1.aws.neon.tech
+  port: 5432
+  user: neondb_owner
+  password: npg_lUdMJbNRt4Q0
+  dbname: neondb
+  sslmode: require
+  timezone: Asia/Bangkok
+
+cloudflare:
+  r2:
+    account_id: 8605ba5178c4d6a945aec62c38a12241
+    access_key_id: 1bb8df36212e7e521eff2b1a304061e0
+    secret_access_key: 8225422f0850984838ed597ba493b88fc9b13a0c8786f2026576bf68ee4df3ff
+    bucket_name: storagehotline
+    public_url: https://photo.akin.love
+
+jwt:
+  secret: your-super-secret-key-min-32-chars-change-this
+  access_token_expiry: 15m
+  refresh_token_expiry: 168h # 7 days
+
+cors:
+  allowed_origins:
+    - http://localhost:3000
+    - http://localhost:5173
+  allowed_methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  allowed_headers:
+    - Origin
+    - Content-Type
+    - Authorization

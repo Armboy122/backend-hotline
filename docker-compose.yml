@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  hotlines3-api:
+    image: hotlines3-api:latest
+    container_name: hotlines3-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - TZ=Asia/Bangkok
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - hotlines3-network
+
+networks:
+  hotlines3-network:
+    driver: bridge
