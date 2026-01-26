@@ -44,5 +44,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.JobDetail{},
 		&models.Team{},
 		&models.TaskDaily{},
+		&models.User{},
 	)
 }

@@ -285,3 +285,58 @@ type TasksByTeamResponse struct {
 	Team  TeamNested     `json:"team"`
 	Tasks []TaskResponse `json:"tasks"`
 }
+
+// === Auth DTOs ===
+
+type LoginRequest struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+type LoginResponse struct {
+	AccessToken  string       `json:"accessToken"`
+	RefreshToken string       `json:"refreshToken"`
+	User         UserResponse `json:"user"`
+}
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refreshToken" binding:"required"`
+}
+
+type RefreshResponse struct {
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+}
+
+type UserResponse struct {
+	ID        uint    `json:"id"`
+	Username  string  `json:"username"`
+	Email     string  `json:"email"`
+	Role      string  `json:"role"`
+	TeamID    *int64  `json:"teamId,omitempty"`
+	IsActive  bool    `json:"isActive"`
+	LastLogin *string `json:"lastLogin,omitempty"`
+	CreatedAt string  `json:"createdAt"`
+}
+
+type CreateUserRequest struct {
+	Username string `json:"username" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
+	Role     string `json:"role" binding:"required,oneof=admin user viewer"`
+	TeamID   *int64 `json:"teamId"`
+	IsActive *bool  `json:"isActive"`
+}
+
+type UpdateUserRequest struct {
+	Username *string `json:"username"`
+	Email    *string `json:"email,omitempty"`
+	Role     *string `json:"role,omitempty,oneof=admin user viewer"`
+	TeamID   *int64  `json:"teamId"`
+	IsActive *bool   `json:"isActive"`
+}
+
+type ChangePasswordRequest struct {
+	OldPassword string `json:"oldPassword" binding:"required"`
+	NewPassword string `json:"newPassword" binding:"required,min=6"`
+}

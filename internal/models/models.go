@@ -299,3 +299,25 @@ type TaskDaily struct {
 func (TaskDaily) TableName() string {
 	return "TaskDaily"
 }
+
+// User - ผู้ใช้งานระบบ
+type User struct {
+	ID        uint       `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	Username  string     `gorm:"not null;unique;column:username" json:"username"`
+	Email     string     `gorm:"not null;unique;column:email" json:"email"`
+	Password  string     `gorm:"not null;column:password" json:"-"`
+	Role      string     `gorm:"not null;default:user;column:role" json:"role"`
+	TeamID    *int64     `gorm:"column:teamId;index:User_teamId_idx" json:"teamId,omitempty"`
+	IsActive  bool       `gorm:"not null;default:true;column:isActive" json:"isActive"`
+	LastLogin *time.Time `gorm:"column:lastLogin" json:"lastLogin,omitempty"`
+	CreatedAt time.Time  `gorm:"not null;type:timestamptz(6);column:createdAt;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt time.Time  `gorm:"not null;type:timestamptz(6);column:updatedAt" json:"updatedAt"`
+	DeletedAt *time.Time `gorm:"type:timestamptz(6);column:deletedAt" json:"deletedAt,omitempty"`
+
+	Team *Team `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
+}
+
+// TableName กำหนดชื่อตารางใน database
+func (User) TableName() string {
+	return "User"
+}
