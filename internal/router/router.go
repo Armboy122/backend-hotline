@@ -158,6 +158,29 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			dashboardV1.GET("/feeder-matrix", handler.FeederMatrix)
 			dashboardV1.GET("/stats", handler.Stats)
 		}
+
+		// Users
+		usersV1 := apiV1.Group("/users")
+		{
+			handler := v1.NewUserHandler(db)
+
+			// Apply authentication middleware to all user routes
+			usersV1.Use(authMw.RequireAuth())
+
+			// Admin only routes
+			adminUsers := usersV1.Group("")
+			adminUsers.Use(authMw.RequireRole("admin"))
+			{
+				adminUsers.GET("", handler.List)
+				adminUsers.GET("/:id", handler.GetByID)
+				adminUsers.POST("", handler.Create)
+				adminUsers.PUT("/:id", handler.Update)
+				adminUsers.DELETE("/:id", handler.Delete)
+			}
+
+			// User can change their own password (authenticated, but not necessarily admin)
+			usersV1.PUT("/:id/password", handler.ChangePassword)
+		}
 	}
 
 	return r
@@ -178,3 +201,4 @@ func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
 		c.Next()
 	}
 }
+```
