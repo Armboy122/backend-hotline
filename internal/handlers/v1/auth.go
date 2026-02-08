@@ -2,13 +2,14 @@ package v1
 
 import (
 	"backend-hotlines3/internal/dto"
+	"backend-hotlines3/internal/middleware"
 	"backend-hotlines3/internal/models"
 	"backend-hotlines3/pkg/jwt"
+	"backend-hotlines3/pkg/password"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -24,17 +25,81 @@ func NewAuthHandler(db *gorm.DB, jwtManager *jwt.JWTManager) *AuthHandler {
 	}
 }
 
+// Register handles user registration
+func (h *AuthHandler) Register(c *gin.Context) {
+	var req dto.CreateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		middleware.HandleValidationError(c, err)
+		return
+	}
+
+	// Check if user already exists
+	var existingUser models.User
+	if err := h.db.Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
+		c.JSON(http.StatusConflict, dto.StandardResponse{
+			Success: false,
+			Error: &dto.ErrorInfo{
+				Code:    "USER_EXISTS",
+				Message: "Username already taken",
+			},
+		})
+		return
+	}
+
+	// Hash password
+	hashedPassword, err := password.HashPassword(req.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
+			Success: false,
+			Error: &dto.ErrorInfo{
+				Code:    "HASHING_ERROR",
+				Message: "Failed to process password",
+			},
+		})
+		return
+	}
+
+	// Create user
+	user := models.User{
+		Username: req.Username,
+		Password: hashedPassword,
+		Role:     req.Role,
+		TeamID:   req.TeamID,
+		IsActive: true,
+	}
+
+	if req.IsActive != nil {
+		user.IsActive = *req.IsActive
+	}
+
+	if err := h.db.Create(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
+			Success: false,
+			Error: &dto.ErrorInfo{
+				Code:    "DATABASE_ERROR",
+				Message: "Failed to create user",
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, dto.StandardResponse{
+		Success: true,
+		Data: dto.UserResponse{
+			ID:        user.ID,
+			Username:  user.Username,
+			Role:      user.Role,
+			IsActive:  user.IsActive,
+			CreatedAt: user.CreatedAt.Format(time.RFC3339),
+		},
+	})
+}
+
 // Login - POST /v1/auth/login
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.StandardResponse{
-			Success: false,
-			Error: &dto.ErrorInfo{
-				Code:    "VALIDATION_ERROR",
-				Message: err.Error(),
-			},
-		})
+		middleware.HandleValidationError(c, err)
 		return
 	}
 
@@ -51,7 +116,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+	if !password.CheckPassword(req.Password, user.Password) {
 		c.JSON(http.StatusUnauthorized, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -126,13 +191,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req dto.RefreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.StandardResponse{
-			Success: false,
-			Error: &dto.ErrorInfo{
-				Code:    "VALIDATION_ERROR",
-				Message: err.Error(),
-			},
-		})
+		middleware.HandleValidationError(c, err)
 		return
 	}
 
