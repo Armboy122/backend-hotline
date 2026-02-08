@@ -3,6 +3,7 @@ package router
 import (
 	"backend-hotlines3/internal/config"
 	v1 "backend-hotlines3/internal/handlers/v1"
+	"backend-hotlines3/internal/middleware"
 	"backend-hotlines3/pkg/jwt"
 	"log"
 
@@ -29,12 +30,18 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 	// ============================================
 	apiV1 := r.Group("/v1")
 	{
+		// Auth middleware
+		authMw := middleware.NewAuthMiddleware(jwtManager)
+
 		// Auth Routes
 		authHandler := v1.NewAuthHandler(db, jwtManager)
 		authGroup := apiV1.Group("/auth")
 		{
 			authGroup.POST("/login", authHandler.Login)
 			authGroup.POST("/register", authHandler.Register)
+			authGroup.POST("/refresh", authHandler.RefreshToken)
+			authGroup.POST("/logout", authMw.RequireAuth(), authHandler.Logout)
+			authGroup.GET("/me", authMw.RequireAuth(), authHandler.Me)
 		}
 
 		// Teams
