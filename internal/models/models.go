@@ -273,7 +273,7 @@ func (Team) TableName() string {
 // TaskDaily - รายงานประจำวัน
 type TaskDaily struct {
 	ID          int64            `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
-	WorkDate    time.Time        `gorm:"not null;type:date;column:workDate;index:TaskDaily_workDate_idx" json:"workDate"`
+	WorkDate    time.Time        `gorm:"not null;type:date;column:workdate;index:TaskDaily_workdate_idx" json:"workDate"`
 	JobTypeID   int64            `gorm:"not null;column:jobTypeId;index:TaskDaily_jobTypeId_jobDetailId_idx" json:"jobTypeId"`
 	JobDetailID int64            `gorm:"not null;column:jobDetailId;index:TaskDaily_jobTypeId_jobDetailId_idx" json:"jobDetailId"`
 	FeederID    *int64           `gorm:"column:feederId;index:TaskDaily_feederId_idx" json:"feederId"`
@@ -281,9 +281,9 @@ type TaskDaily struct {
 	DeviceCode  *string          `gorm:"column:deviceCode" json:"deviceCode,omitempty"`
 	URLsBefore  StringArray      `gorm:"type:text[];column:urlsBefore" json:"urlsBefore"`
 	URLsAfter   StringArray      `gorm:"type:text[];column:urlsAfter" json:"urlsAfter"`
-	CreatedAt   time.Time        `gorm:"not null;type:timestamptz(6);column:createdAt;default:CURRENT_TIMESTAMP" json:"createdAt"`
-	UpdatedAt   time.Time        `gorm:"not null;type:timestamptz(6);column:updatedAt" json:"updatedAt"`
-	DeletedAt   *time.Time       `gorm:"type:timestamptz(6);column:deletedAt" json:"deletedAt,omitempty"`
+	CreatedAt   time.Time        `gorm:"not null;type:timestamptz(6);column:createdat;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt   time.Time        `gorm:"not null;type:timestamptz(6);column:updatedat" json:"updatedAt"`
+	DeletedAt   *time.Time       `gorm:"type:timestamptz(6);column:deletedat" json:"deletedAt,omitempty"`
 	Detail      *string          `gorm:"column:detail" json:"detail,omitempty"`
 	TeamID      int64            `gorm:"not null;column:teamId" json:"teamId"`
 	Latitude    *decimal.Decimal `gorm:"type:decimal(9,6);column:latitude;index:TaskDaily_latitude_longitude_idx" json:"latitude,omitempty"`
