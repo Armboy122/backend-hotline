@@ -3,10 +3,13 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"backend-hotlines3/internal/config"
 	"backend-hotlines3/internal/database"
+	"backend-hotlines3/internal/middleware"
 	"backend-hotlines3/internal/router"
+	"backend-hotlines3/pkg/jwt"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,8 +35,23 @@ func main() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
+	// Initialize JWT Manager
+	accessTokenExpiry, err := time.ParseDuration(cfg.JWT.AccessTokenExpiry)
+	if err != nil {
+		log.Fatalf("Failed to parse access token expiry: %v", err)
+	}
+	refreshTokenExpiry, err := time.ParseDuration(cfg.JWT.RefreshTokenExpiry)
+	if err != nil {
+		log.Fatalf("Failed to parse refresh token expiry: %v", err)
+	}
+
+	jwtManager := jwt.NewJWTManager(cfg.JWT.Secret, accessTokenExpiry, refreshTokenExpiry)
+
 	// สร้าง router
-	r := router.SetupRouter(cfg, db)
+	r := router.SetupRouter(cfg, db, jwtManager)
+
+	// Global Recovery Middleware (Handle Panics)
+	r.Use(middleware.RecoveryMiddleware())
 
 	// เริ่ม server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)

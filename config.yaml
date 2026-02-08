@@ -3,12 +3,13 @@ server:
   mode: debug # debug, release
 
 database:
-  host: ep-sweet-hill-a1a76thg.ap-southeast-1.aws.neon.tech
+  # For Docker Compose, use the service name as host
+  host: db
   port: 5432
-  user: neondb_owner
-  password: npg_lUdMJbNRt4Q0
-  dbname: neondb
-  sslmode: require
+  user: postgres
+  password: password
+  dbname: hotlines3
+  sslmode: disable
   timezone: Asia/Bangkok
 
 cloudflare:
@@ -20,8 +21,8 @@ cloudflare:
     public_url: https://photo.akin.love
 
 jwt:
-  secret: your-super-secret-key-min-32-chars-change-this
-  access_token_expiry: 15m
+  secret: my-super-secret-jwt-key-for-local-dev
+  access_token_expiry: 1h
   refresh_token_expiry: 168h # 7 days
 
 cors:

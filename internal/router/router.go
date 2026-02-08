@@ -3,13 +3,14 @@ package router
 import (
 	"backend-hotlines3/internal/config"
 	v1 "backend-hotlines3/internal/handlers/v1"
+	"backend-hotlines3/pkg/jwt"
 	"log"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
+func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *gin.Engine {
 	r := gin.Default()
 
 	// CORS middleware
@@ -28,6 +29,14 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	// ============================================
 	apiV1 := r.Group("/v1")
 	{
+		// Auth Routes
+		authHandler := v1.NewAuthHandler(db, jwtManager)
+		authGroup := apiV1.Group("/auth")
+		{
+			authGroup.POST("/login", authHandler.Login)
+			authGroup.POST("/register", authHandler.Register)
+		}
+
 		// Teams
 		teamsV1 := apiV1.Group("/teams")
 		{
