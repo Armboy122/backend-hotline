@@ -304,7 +304,6 @@ func (TaskDaily) TableName() string {
 type User struct {
 	ID        uint       `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
 	Username  string     `gorm:"not null;unique;column:username" json:"username"`
-	Email     string     `gorm:"not null;unique;column:email" json:"email"`
 	Password  string     `gorm:"not null;column:password" json:"-"`
 	Role      string     `gorm:"not null;default:user;column:role" json:"role"`
 	TeamID    *int64     `gorm:"column:teamId;index:User_teamId_idx" json:"teamId,omitempty"`

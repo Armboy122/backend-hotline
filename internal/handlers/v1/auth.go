@@ -39,7 +39,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := h.db.Where("username = ? OR email = ?", req.Username, req.Username).First(&user).Error; err != nil {
+	// Login by username only
+	if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -99,7 +100,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		User: dto.UserResponse{
 			ID:        user.ID,
 			Username:  user.Username,
-			Email:     user.Email,
 			Role:      user.Role,
 			TeamID:    user.TeamID,
 			IsActive:  user.IsActive,
@@ -228,7 +228,6 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	response := dto.UserResponse{
 		ID:        user.ID,
 		Username:  user.Username,
-		Email:     user.Email,
 		Role:      user.Role,
 		TeamID:    user.TeamID,
 		IsActive:  user.IsActive,
