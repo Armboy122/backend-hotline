@@ -490,8 +490,8 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		dateQuery = dateQuery.Where("\"WorkDate\" <= ?", endDate)
 	}
 
-	dateQuery.Group("\"WorkDate\"").
-		Order("\"WorkDate\" ASC").
+	dateQuery.Group("date").
+		Order("date ASC").
 		Find(&dateResults)
 
 	for _, r := range dateResults {
@@ -519,3 +519,4 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		},
 	})
 }
+```
