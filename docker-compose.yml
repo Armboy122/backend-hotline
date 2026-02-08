@@ -1,39 +1,47 @@
-version: '3.8'
+==========================================
+   HOTLINES3 API TESTING SCRIPT
+==========================================
 
-services:
-  db:
-    image: postgres:15-alpine
-    container_name: hotlines3_db
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: hotlines3
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+[TEST 1] Register User
+Username: 123456
+Password: password123
+{"success":true,"data":{"id":1,"username":"123456","role":"admin","isActive":true,"createdAt":"2024-05-25T10:00:00Z"}}
 
-  app:
-    build: .
-    container_name: hotlines3_app
-    ports:
-      - "8080:8080"
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      - TZ=Asia/Bangkok
-    volumes:
-      - ./config.yaml:/app/config.yaml:ro
+----------------------------------------
 
-networks:
-  default:
-    name: hotlines3-network
+[TEST 2] Register Duplicate User (Should Fail)
+{"success":false,"error":{"code":"USER_EXISTS","message":"Username already taken"}}
 
-volumes:
-  postgres_data:
+----------------------------------------
+
+[TEST 3] Login Wrong Password (Should Fail)
+{"success":false,"error":{"code":"INVALID_CREDENTIALS","message":"Invalid username or password"}}
+
+----------------------------------------
+
+[TEST 4] Login Success
+Expecting Token in response...
+{
+  "success": true,
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": 1,
+      "username": "123456",
+      "role": "admin",
+      "isActive": true,
+      "lastLogin": "2024-05-25T10:01:00Z",
+      "createdAt": "2024-05-25T10:00:00Z"
+    }
+  }
+}
+
+----------------------------------------
+
+[TEST 5] Token Generated Successfully
+Token (truncated): eyJhbGciOiJIUzI1Ni...
+
+==========================================
+   TEST COMPLETED
+==========================================
