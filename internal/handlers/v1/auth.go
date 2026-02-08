@@ -46,6 +46,19 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// Logic: ถ้า Role เป็น 'user' ต้องระบุ TeamID เสมอ
+	// เพื่อให้รู้ว่า User นี้อยู่ทีมไหน (แก้ไขปัญหาที่คุณสังเกตเห็น)
+	if req.Role == "user" && req.TeamID == nil {
+		c.JSON(http.StatusBadRequest, dto.StandardResponse{
+			Success: false,
+			Error: &dto.ErrorInfo{
+				Code:    "TEAM_ID_REQUIRED",
+				Message: "TeamID is required for role 'user'",
+			},
+		})
+		return
+	}
+
 	// Hash password
 	hashedPassword, err := password.HashPassword(req.Password)
 	if err != nil {
