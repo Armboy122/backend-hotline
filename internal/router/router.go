@@ -2,7 +2,6 @@ package router
 
 import (
 	"backend-hotlines3/internal/config"
-	"backend-hotlines3/internal/handlers"
 	v1 "backend-hotlines3/internal/handlers/v1"
 	"log"
 
@@ -142,106 +141,6 @@ func SetupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 			dashboardV1.GET("/top-feeders", handler.TopFeeders)
 			dashboardV1.GET("/feeder-matrix", handler.FeederMatrix)
 			dashboardV1.GET("/stats", handler.Stats)
-		}
-	}
-
-	// ============================================
-	// Legacy API Routes (Keep for backward compatibility)
-	// ============================================
-	api := r.Group("/api")
-	{
-		// Master Data Routes
-		operationCenters := api.Group("/operation-centers")
-		{
-			handler := handlers.NewOperationCenterHandler(db)
-			operationCenters.GET("", handler.List)
-			operationCenters.GET("/:id", handler.GetByID)
-			operationCenters.POST("", handler.Create)
-			operationCenters.PUT("/:id", handler.Update)
-			operationCenters.DELETE("/:id", handler.Delete)
-		}
-
-		peas := api.Group("/peas")
-		{
-			handler := handlers.NewPEAHandler(db)
-			peas.GET("", handler.List)
-			peas.GET("/:id", handler.GetByID)
-			peas.POST("", handler.Create)
-			peas.POST("/bulk", handler.BulkCreate)
-			peas.PUT("/:id", handler.Update)
-			peas.DELETE("/:id", handler.Delete)
-		}
-
-		stations := api.Group("/stations")
-		{
-			handler := handlers.NewStationHandler(db)
-			stations.GET("", handler.List)
-			stations.GET("/:id", handler.GetByID)
-			stations.POST("", handler.Create)
-			stations.PUT("/:id", handler.Update)
-			stations.DELETE("/:id", handler.Delete)
-		}
-
-		feeders := api.Group("/feeders")
-		{
-			handler := handlers.NewFeederHandler(db)
-			feeders.GET("", handler.List)
-			feeders.GET("/:id", handler.GetByID)
-			feeders.POST("", handler.Create)
-			feeders.PUT("/:id", handler.Update)
-			feeders.DELETE("/:id", handler.Delete)
-		}
-
-		jobTypes := api.Group("/job-types")
-		{
-			handler := handlers.NewJobTypeHandler(db)
-			jobTypes.GET("", handler.List)
-			jobTypes.GET("/:id", handler.GetByID)
-			jobTypes.POST("", handler.Create)
-			jobTypes.PUT("/:id", handler.Update)
-			jobTypes.DELETE("/:id", handler.Delete)
-		}
-
-		jobDetails := api.Group("/job-details")
-		{
-			handler := handlers.NewJobDetailHandler(db)
-			jobDetails.GET("", handler.List)
-			jobDetails.GET("/:id", handler.GetByID)
-			jobDetails.POST("", handler.Create)
-			jobDetails.PUT("/:id", handler.Update)
-			jobDetails.DELETE("/:id", handler.Delete)
-		}
-
-		teams := api.Group("/teams")
-		{
-			handler := handlers.NewTeamHandler(db)
-			teams.GET("", handler.List)
-			teams.GET("/:id", handler.GetByID)
-			teams.POST("", handler.Create)
-			teams.PUT("/:id", handler.Update)
-			teams.DELETE("/:id", handler.Delete)
-		}
-
-		// Task Daily Routes
-		tasks := api.Group("/tasks")
-		{
-			handler := handlers.NewTaskDailyHandler(db)
-			tasks.GET("", handler.List)
-			tasks.GET("/by-team", handler.ListByTeam)
-			tasks.GET("/:id", handler.GetByID)
-			tasks.POST("", handler.Create)
-			tasks.PUT("/:id", handler.Update)
-			tasks.DELETE("/:id", handler.Delete)
-		}
-
-		// Dashboard Routes
-		dashboard := api.Group("/dashboard")
-		{
-			handler := handlers.NewDashboardHandler(db)
-			dashboard.GET("/summary", handler.Summary)
-			dashboard.GET("/top-jobs", handler.TopJobs)
-			dashboard.GET("/top-feeders", handler.TopFeeders)
-			dashboard.GET("/stats", handler.Stats)
 		}
 	}
 
