@@ -3,7 +3,6 @@ package v1
 import (
 	"backend-hotlines3/internal/dto"
 	"backend-hotlines3/internal/models"
-	"backend-hotlines3/pkg/jwt"
 	"net/http"
 	"strconv"
 	"time"
@@ -45,7 +44,6 @@ func (h *UserHandler) List(c *gin.Context) {
 		response = append(response, dto.UserResponse{
 			ID:        user.ID,
 			Username:  user.Username,
-			Email:     user.Email,
 			Role:      user.Role,
 			TeamID:    user.TeamID,
 			IsActive:  user.IsActive,
@@ -104,7 +102,6 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 	response := dto.UserResponse{
 		ID:        user.ID,
 		Username:  user.Username,
-		Email:     user.Email,
 		Role:      user.Role,
 		TeamID:    user.TeamID,
 		IsActive:  user.IsActive,
@@ -151,7 +148,6 @@ func (h *UserHandler) Create(c *gin.Context) {
 
 	user := models.User{
 		Username: req.Username,
-		Email:    req.Email,
 		Password: string(hashedPassword),
 		Role:     req.Role,
 		TeamID:   req.TeamID,
@@ -183,7 +179,6 @@ func (h *UserHandler) Create(c *gin.Context) {
 	response := dto.UserResponse{
 		ID:        user.ID,
 		Username:  user.Username,
-		Email:     user.Email,
 		Role:      user.Role,
 		TeamID:    user.TeamID,
 		IsActive:  user.IsActive,
@@ -248,9 +243,6 @@ func (h *UserHandler) Update(c *gin.Context) {
 	if req.Username != nil {
 		user.Username = *req.Username
 	}
-	if req.Email != nil {
-		user.Email = *req.Email
-	}
 	if req.Role != nil {
 		user.Role = *req.Role
 	}
@@ -291,7 +283,6 @@ func (h *UserHandler) Update(c *gin.Context) {
 	response := dto.UserResponse{
 		ID:        user.ID,
 		Username:  user.Username,
-		Email:     user.Email,
 		Role:      user.Role,
 		TeamID:    user.TeamID,
 		IsActive:  user.IsActive,

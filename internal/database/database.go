@@ -9,7 +9,18 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
 )
+
+// CamelCaseNamingStrategy - Custom naming strategy to use camelCase column names
+type CamelCaseNamingStrategy struct {
+	schema.NamingStrategy
+}
+
+func (s CamelCaseNamingStrategy) ColumnName(table, column string) string {
+	// Use column names as defined in struct tags (camelCase)
+	return column
+}
 
 func Connect(cfg *config.Config) (*gorm.DB, error) {
 	dsn := fmt.Sprintf(
@@ -25,6 +36,12 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
+		NamingStrategy: CamelCaseNamingStrategy{
+			schema.NamingStrategy{
+				SingularTable: true,
+				NoLowerCase:   true,
+			},
+		},
 	})
 
 	if err != nil {

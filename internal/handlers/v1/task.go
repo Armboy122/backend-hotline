@@ -111,20 +111,24 @@ func (h *TaskHandler) List(c *gin.Context) {
 	offset := (page - 1) * limit
 
 	// Build query
-	query := h.db.Model(&models.TaskDaily{}).Where("deleted_at IS NULL")
+	query := h.db.Model(&models.TaskDaily{})
 
 	// Apply filters
 	if workDate := c.Query("workDate"); workDate != "" {
-		query = query.Where("work_date = ?", workDate)
+		parsedDate, _ := time.Parse("2006-01-02", workDate)
+		query = query.Where("WorkDate = ?", parsedDate)
 	}
 	if teamID := c.Query("teamId"); teamID != "" {
-		query = query.Where("team_id = ?", teamID)
+		id, _ := strconv.ParseInt(teamID, 10, 64)
+		query = query.Where("TeamID = ?", id)
 	}
 	if jobTypeID := c.Query("jobTypeId"); jobTypeID != "" {
-		query = query.Where("job_type_id = ?", jobTypeID)
+		id, _ := strconv.ParseInt(jobTypeID, 10, 64)
+		query = query.Where("JobTypeID = ?", id)
 	}
 	if feederID := c.Query("feederId"); feederID != "" {
-		query = query.Where("feeder_id = ?", feederID)
+		id, _ := strconv.ParseInt(feederID, 10, 64)
+		query = query.Where("FeederID = ?", id)
 	}
 
 	// Get total count
@@ -138,7 +142,7 @@ func (h *TaskHandler) List(c *gin.Context) {
 		Preload("JobType").
 		Preload("JobDetail").
 		Preload("Feeder.Station.OperationCenter").
-		Order("work_date DESC, created_at DESC").
+		Order("WorkDate DESC, CreatedAt DESC").
 		Offset(offset).
 		Limit(limit).
 		Find(&tasks).Error; err != nil {
@@ -457,12 +461,12 @@ func (h *TaskHandler) ListByFilter(c *gin.Context) {
 
 	// Build query
 	query := h.db.Model(&models.TaskDaily{}).
-		Where("deleted_at IS NULL").
-		Where("EXTRACT(YEAR FROM work_date) = ?", year).
-		Where("EXTRACT(MONTH FROM work_date) = ?", month)
+		Where("EXTRACT(YEAR FROM WorkDate) = ?", year).
+		Where("EXTRACT(MONTH FROM WorkDate) = ?", month)
 
 	if teamID := c.Query("teamId"); teamID != "" {
-		query = query.Where("team_id = ?", teamID)
+		id, _ := strconv.ParseInt(teamID, 10, 64)
+		query = query.Where("TeamID = ?", id)
 	}
 
 	// Get tasks
@@ -472,7 +476,7 @@ func (h *TaskHandler) ListByFilter(c *gin.Context) {
 		Preload("JobType").
 		Preload("JobDetail").
 		Preload("Feeder.Station.OperationCenter").
-		Order("work_date DESC, created_at DESC").
+		Order("WorkDate DESC, CreatedAt DESC").
 		Find(&tasks).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
@@ -520,12 +524,11 @@ func (h *TaskHandler) ListByTeam(c *gin.Context) {
 	// Get tasks
 	var tasks []models.TaskDaily
 	if err := h.db.
-		Where("deleted_at IS NULL").
 		Preload("Team").
 		Preload("JobType").
 		Preload("JobDetail").
 		Preload("Feeder.Station.OperationCenter").
-		Order("work_date DESC, created_at DESC").
+		Order("WorkDate DESC, CreatedAt DESC").
 		Find(&tasks).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,

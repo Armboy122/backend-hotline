@@ -3,13 +3,12 @@ server:
   mode: debug # debug, release
 
 database:
-  # For Docker Compose, use the service name as host
-  host: db
+  host: ep-sweet-hill-a1a76thg.ap-southeast-1.aws.neon.tech
   port: 5432
-  user: postgres
-  password: password
-  dbname: hotlines3
-  sslmode: disable
+  user: neondb_owner
+  password: npg_lUdMJbNRt4Q0
+  dbname: neondb
+  sslmode: require
   timezone: Asia/Bangkok
 
 cloudflare:
