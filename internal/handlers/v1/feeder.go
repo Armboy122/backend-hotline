@@ -38,25 +38,7 @@ func (h *FeederHandler) List(c *gin.Context) {
 		feederIDs = append(feederIDs, f.ID)
 	}
 
-	// Query task counts
-	type TaskCount struct {
-		FeederID int64
-		Count    int64
-	}
-	var taskCounts []TaskCount
-	if len(feederIDs) > 0 {
-		h.db.Model(&models.TaskDaily{}).
-			Select("feeder_id as feeder_id, count(*) as count").
-			Where("feeder_id IN ? AND deleted_at IS NULL", feederIDs).
-			Group("feeder_id").
-			Find(&taskCounts)
-	}
-
-	// Create count map
-	countMap := make(map[int64]int64)
-	for _, tc := range taskCounts {
-		countMap[tc.FeederID] = tc.Count
-	}
+	countMap := models.CountTasksBy(h.db, models.TaskCol.FeederID, feederIDs)
 
 	// Build response
 	var response []dto.FeederResponse
@@ -119,11 +101,7 @@ func (h *FeederHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	// Get task count
-	var count int64
-	h.db.Model(&models.TaskDaily{}).
-		Where("feeder_id = ? AND deleted_at IS NULL", id).
-		Count(&count)
+	count := models.CountTasksFor(h.db, models.TaskCol.FeederID, id)
 
 	response := dto.FeederResponse{
 		ID:        feeder.ID,
@@ -280,11 +258,7 @@ func (h *FeederHandler) Update(c *gin.Context) {
 	// Reload with relations
 	h.db.Preload("Station.OperationCenter").First(&feeder, feeder.ID)
 
-	// Get task count
-	var count int64
-	h.db.Model(&models.TaskDaily{}).
-		Where("feeder_id = ? AND deleted_at IS NULL", id).
-		Count(&count)
+	count := models.CountTasksFor(h.db, models.TaskCol.FeederID, id)
 
 	response := dto.FeederResponse{
 		ID:        feeder.ID,

@@ -120,15 +120,15 @@ func (h *TaskHandler) List(c *gin.Context) {
 	}
 	if teamID := c.Query("teamId"); teamID != "" {
 		id, _ := strconv.ParseInt(teamID, 10, 64)
-		query = query.Where("TeamID = ?", id)
+		query = query.Where(models.TaskCol.TeamID+" = ?", id)
 	}
 	if jobTypeID := c.Query("jobTypeId"); jobTypeID != "" {
 		id, _ := strconv.ParseInt(jobTypeID, 10, 64)
-		query = query.Where("JobTypeID = ?", id)
+		query = query.Where(models.TaskCol.JobTypeID+" = ?", id)
 	}
 	if feederID := c.Query("feederId"); feederID != "" {
 		id, _ := strconv.ParseInt(feederID, 10, 64)
-		query = query.Where("FeederID = ?", id)
+		query = query.Where(models.TaskCol.FeederID+" = ?", id)
 	}
 
 	// Get total count
@@ -466,7 +466,7 @@ func (h *TaskHandler) ListByFilter(c *gin.Context) {
 
 	if teamID := c.Query("teamId"); teamID != "" {
 		id, _ := strconv.ParseInt(teamID, 10, 64)
-		query = query.Where("TeamID = ?", id)
+		query = query.Where(models.TaskCol.TeamID+" = ?", id)
 	}
 
 	// Get tasks

@@ -37,24 +37,7 @@ func (h *JobTypeHandler) List(c *gin.Context) {
 	for _, jt := range jobTypes {
 		jobTypeIDs = append(jobTypeIDs, jt.ID)
 	}
-
-	// Query task counts
-	type TaskCount struct {
-		JobTypeID int64
-		Count     int64
-	}
-	var taskCounts []TaskCount
-	h.db.Model(&models.TaskDaily{}).
-		Select("job_type_id as job_type_id, count(*) as count").
-		Where("job_type_id IN ? AND deleted_at IS NULL", jobTypeIDs).
-		Group("job_type_id").
-		Find(&taskCounts)
-
-	// Create count map
-	countMap := make(map[int64]int64)
-	for _, tc := range taskCounts {
-		countMap[tc.JobTypeID] = tc.Count
-	}
+	countMap := models.CountTasksBy(h.db, models.TaskCol.JobTypeID, jobTypeIDs)
 
 	// Build response
 	var response []dto.JobTypeResponse
@@ -100,11 +83,7 @@ func (h *JobTypeHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	// Get task count
-	var count int64
-	h.db.Model(&models.TaskDaily{}).
-		Where("job_type_id = ? AND deleted_at IS NULL", id).
-		Count(&count)
+	count := models.CountTasksFor(h.db, models.TaskCol.JobTypeID, id)
 
 	response := dto.JobTypeResponse{
 		ID:   jobType.ID,
@@ -214,11 +193,7 @@ func (h *JobTypeHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// Get task count
-	var count int64
-	h.db.Model(&models.TaskDaily{}).
-		Where("job_type_id = ? AND deleted_at IS NULL", id).
-		Count(&count)
+	count := models.CountTasksFor(h.db, models.TaskCol.JobTypeID, id)
 
 	response := dto.JobTypeResponse{
 		ID:   jobType.ID,

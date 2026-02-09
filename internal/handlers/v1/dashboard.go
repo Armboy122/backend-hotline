@@ -26,20 +26,8 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 	jobTypeID := c.Query("jobTypeId")
 
 	// Build base query
-	query := h.db.Model(&models.TaskDaily{})
-
-	if year != "" {
-		query = query.Where("EXTRACT(YEAR FROM \"WorkDate\") = ?", year)
-	}
-	if month != "" {
-		query = query.Where("EXTRACT(MONTH FROM \"WorkDate\") = ?", month)
-	}
-	if teamID != "" && teamID != "all" {
-		query = query.Where("\"TeamId\" = ?", teamID)
-	}
-	if jobTypeID != "" && jobTypeID != "all" {
-		query = query.Where("\"JobTypeId\" = ?", jobTypeID)
-	}
+	query := h.db.Model(&models.TaskDaily{}).
+		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID))
 
 	// Total tasks
 	var totalTasks int64
@@ -59,17 +47,10 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 		Count  int64
 	}
 	var topTeamResult TeamCount
-	topTeamQuery := h.db.Model(&models.TaskDaily{}).
-		Select("\"TeamId\" as TeamID, count(*) as count")
-
-	if year != "" {
-		topTeamQuery = topTeamQuery.Where("EXTRACT(YEAR FROM \"WorkDate\") = ?", year)
-	}
-	if month != "" {
-		topTeamQuery = topTeamQuery.Where("EXTRACT(MONTH FROM \"WorkDate\") = ?", month)
-	}
-
-	topTeamQuery.Group("\"TeamId\"").
+	h.db.Model(&models.TaskDaily{}).
+		Select(models.TaskCol.TeamID+" as TeamID, count(*) as count").
+		Scopes(models.TaskByYear(year), models.TaskByMonth(month)).
+		Group(models.TaskCol.TeamID).
 		Order("count DESC").
 		Limit(1).
 		Find(&topTeamResult)
@@ -116,22 +97,10 @@ func (h *DashboardHandler) TopJobs(c *gin.Context) {
 	var results []JobCount
 
 	query := h.db.Model(&models.TaskDaily{}).
-		Select("\"JobDetailId\" as JobDetailID, count(*) as count")
+		Select(models.TaskCol.JobDetailID+" as JobDetailID, count(*) as count").
+		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID))
 
-	if year != "" {
-		query = query.Where("EXTRACT(YEAR FROM \"WorkDate\") = ?", year)
-	}
-	if month != "" {
-		query = query.Where("EXTRACT(MONTH FROM \"WorkDate\") = ?", month)
-	}
-	if teamID != "" && teamID != "all" {
-		query = query.Where("\"TeamId\" = ?", teamID)
-	}
-	if jobTypeID != "" && jobTypeID != "all" {
-		query = query.Where("\"JobTypeId\" = ?", jobTypeID)
-	}
-
-	query.Group("\"JobDetailId\"").
+	query.Group(models.TaskCol.JobDetailID).
 		Order("count DESC").
 		Limit(limit).
 		Find(&results)
@@ -181,23 +150,11 @@ func (h *DashboardHandler) TopFeeders(c *gin.Context) {
 	var results []FeederCount
 
 	query := h.db.Model(&models.TaskDaily{}).
-		Select("\"FeederId\" as FeederID, count(*) as count").
-		Where("\"FeederId\" IS NOT NULL")
+		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+		Scopes(models.TaskFeederNotNull).
+		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID))
 
-	if year != "" {
-		query = query.Where("EXTRACT(YEAR FROM \"WorkDate\") = ?", year)
-	}
-	if month != "" {
-		query = query.Where("EXTRACT(MONTH FROM \"WorkDate\") = ?", month)
-	}
-	if teamID != "" && teamID != "all" {
-		query = query.Where("\"TeamId\" = ?", teamID)
-	}
-	if jobTypeID != "" && jobTypeID != "all" {
-		query = query.Where("\"JobTypeId\" = ?", jobTypeID)
-	}
-
-	query.Group("\"FeederId\"").
+	query.Group(models.TaskCol.FeederID).
 		Order("count DESC").
 		Limit(limit).
 		Find(&results)
@@ -277,17 +234,11 @@ func (h *DashboardHandler) FeederMatrix(c *gin.Context) {
 	var results []JobDetailCount
 
 	query := h.db.Model(&models.TaskDaily{}).
-		Select("\"JobDetailId\" as JobDetailID, count(*) as count").
-		Where("\"FeederId\" = ?", feederID)
+		Select(models.TaskCol.JobDetailID+" as JobDetailID, count(*) as count").
+		Where(models.TaskCol.FeederID+" = ?", feederID).
+		Scopes(models.TaskByYear(year), models.TaskByMonth(month))
 
-	if year != "" {
-		query = query.Where("EXTRACT(YEAR FROM \"WorkDate\") = ?", year)
-	}
-	if month != "" {
-		query = query.Where("EXTRACT(MONTH FROM \"WorkDate\") = ?", month)
-	}
-
-	query.Group("\"JobDetailId\"").
+	query.Group(models.TaskCol.JobDetailID).
 		Order("count DESC").
 		Find(&results)
 
@@ -337,20 +288,10 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	feederID := c.Query("feederId")
 
 	// Build base query
-	query := h.db.Model(&models.TaskDaily{})
-
-	if startDate != "" {
-		query = query.Where("\"WorkDate\" >= ?", startDate)
-	}
-	if endDate != "" {
-		query = query.Where("\"WorkDate\" <= ?", endDate)
-	}
-	if teamID != "" && teamID != "all" {
-		query = query.Where("\"TeamId\" = ?", teamID)
-	}
-	if feederID != "" && feederID != "all" {
-		query = query.Where("\"FeederId\" = ?", feederID)
-	}
+	query := h.db.Model(&models.TaskDaily{}).
+		Scopes(models.TaskByDateRange(startDate, endDate)).
+		Scopes(models.TaskByTeam(teamID)).
+		Scopes(models.TaskByFeeder(feederID))
 
 	// Total tasks
 	var totalTasks int64
@@ -359,7 +300,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	// Active teams
 	var activeTeams int64
 	h.db.Model(&models.TaskDaily{}).
-		Select("DISTINCT \"TeamId\"").
+		Select("DISTINCT "+models.TaskCol.TeamID).
 		Count(&activeTeams)
 
 	// Top job type
@@ -369,8 +310,8 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	}
 	var topJobTypeResult JobTypeCount
 	h.db.Model(&models.TaskDaily{}).
-		Select("\"JobTypeId\" as JobTypeID, count(*) as count").
-		Group("\"JobTypeId\"").
+		Select(models.TaskCol.JobTypeID+" as JobTypeID, count(*) as count").
+		Group(models.TaskCol.JobTypeID).
 		Order("count DESC").
 		Limit(1).
 		Find(&topJobTypeResult)
@@ -389,9 +330,9 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	}
 	var topFeederResult FeederCount
 	h.db.Model(&models.TaskDaily{}).
-		Select("\"FeederId\" as FeederID, count(*) as count").
-		Where("\"FeederId\" IS NOT NULL").
-		Group("\"FeederId\"").
+		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+		Scopes(models.TaskFeederNotNull).
+		Group(models.TaskCol.FeederID).
 		Order("count DESC").
 		Limit(1).
 		Find(&topFeederResult)
@@ -416,9 +357,9 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count    int64
 	}
 	h.db.Model(&models.TaskDaily{}).
-		Select("\"FeederId\" as FeederID, count(*) as count").
-		Where("\"FeederId\" IS NOT NULL").
-		Group("\"FeederId\"").
+		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+		Scopes(models.TaskFeederNotNull).
+		Group(models.TaskCol.FeederID).
 		Order("count DESC").
 		Limit(10).
 		Find(&feederResults)
@@ -439,8 +380,8 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count     int64
 	}
 	h.db.Model(&models.TaskDaily{}).
-		Select("\"JobTypeId\" as JobTypeID, count(*) as count").
-		Group("\"JobTypeId\"").
+		Select(models.TaskCol.JobTypeID+" as JobTypeID, count(*) as count").
+		Group(models.TaskCol.JobTypeID).
 		Order("count DESC").
 		Find(&jobTypeResults)
 
@@ -460,8 +401,8 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count  int64
 	}
 	h.db.Model(&models.TaskDaily{}).
-		Select("\"TeamId\" as TeamID, count(*) as count").
-		Group("\"TeamId\"").
+		Select(models.TaskCol.TeamID+" as TeamID, count(*) as count").
+		Group(models.TaskCol.TeamID).
 		Order("count DESC").
 		Find(&teamResults)
 
@@ -481,14 +422,8 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count int64
 	}
 	dateQuery := h.db.Model(&models.TaskDaily{}).
-		Select("TO_CHAR(\"WorkDate\", 'YYYY-MM-DD') as date, count(*) as count")
-
-	if startDate != "" {
-		dateQuery = dateQuery.Where("\"WorkDate\" >= ?", startDate)
-	}
-	if endDate != "" {
-		dateQuery = dateQuery.Where("\"WorkDate\" <= ?", endDate)
-	}
+		Select("TO_CHAR("+models.TaskCol.WorkDate+", 'YYYY-MM-DD') as date, count(*) as count").
+		Scopes(models.TaskByDateRange(startDate, endDate))
 
 	dateQuery.Group("date").
 		Order("date ASC").
@@ -519,4 +454,3 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		},
 	})
 }
-```

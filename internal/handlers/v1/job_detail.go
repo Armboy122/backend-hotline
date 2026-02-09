@@ -23,7 +23,7 @@ func NewJobDetailHandler(db *gorm.DB) *JobDetailHandler {
 func (h *JobDetailHandler) List(c *gin.Context) {
 	var jobDetails []models.JobDetail
 	// Only get non-deleted records
-	if err := h.db.Where("deleted_at IS NULL").Find(&jobDetails).Error; err != nil {
+	if err := h.db.Scopes(models.JobDetailNotDeleted).Find(&jobDetails).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -40,25 +40,7 @@ func (h *JobDetailHandler) List(c *gin.Context) {
 		jobDetailIDs = append(jobDetailIDs, jd.ID)
 	}
 
-	// Query task counts
-	type TaskCount struct {
-		JobDetailID int64
-		Count       int64
-	}
-	var taskCounts []TaskCount
-	if len(jobDetailIDs) > 0 {
-		h.db.Model(&models.TaskDaily{}).
-			Select("job_detail_id as job_detail_id, count(*) as count").
-			Where("job_detail_id IN ? AND deleted_at IS NULL", jobDetailIDs).
-			Group("job_detail_id").
-			Find(&taskCounts)
-	}
-
-	// Create count map
-	countMap := make(map[int64]int64)
-	for _, tc := range taskCounts {
-		countMap[tc.JobDetailID] = tc.Count
-	}
+	countMap := models.CountTasksBy(h.db, models.TaskCol.JobDetailID, jobDetailIDs)
 
 	// Build response
 	var response []dto.JobDetailResponse
@@ -114,11 +96,7 @@ func (h *JobDetailHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	// Get task count
-	var count int64
-	h.db.Model(&models.TaskDaily{}).
-		Where("job_detail_id = ? AND deleted_at IS NULL", id).
-		Count(&count)
+	count := models.CountTasksFor(h.db, models.TaskCol.JobDetailID, id)
 
 	var deletedAt *string
 	if jobDetail.DeletedAt != nil {
@@ -257,11 +235,7 @@ func (h *JobDetailHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// Get task count
-	var count int64
-	h.db.Model(&models.TaskDaily{}).
-		Where("job_detail_id = ? AND deleted_at IS NULL", id).
-		Count(&count)
+	count := models.CountTasksFor(h.db, models.TaskCol.JobDetailID, id)
 
 	var deletedAt *string
 	if jobDetail.DeletedAt != nil {
@@ -382,11 +356,7 @@ func (h *JobDetailHandler) Restore(c *gin.Context) {
 		return
 	}
 
-	// Get task count
-	var count int64
-	h.db.Model(&models.TaskDaily{}).
-		Where("job_detail_id = ? AND deleted_at IS NULL", id).
-		Count(&count)
+	count := models.CountTasksFor(h.db, models.TaskCol.JobDetailID, id)
 
 	response := dto.JobDetailResponse{
 		ID:        jobDetail.ID,

@@ -37,24 +37,7 @@ func (h *TeamHandler) List(c *gin.Context) {
 	for _, t := range teams {
 		teamIDs = append(teamIDs, t.ID)
 	}
-
-	// Query task counts
-	type TaskCount struct {
-		TeamID int64
-		Count  int64
-	}
-	var taskCounts []TaskCount
-	h.db.Model(&models.TaskDaily{}).
-		Select("team_id as team_id, count(*) as count").
-		Where("team_id IN ? AND deleted_at IS NULL", teamIDs).
-		Group("team_id").
-		Find(&taskCounts)
-
-	// Create count map
-	countMap := make(map[int64]int64)
-	for _, tc := range taskCounts {
-		countMap[tc.TeamID] = tc.Count
-	}
+	countMap := models.CountTasksBy(h.db, models.TaskCol.TeamID, teamIDs)
 
 	// Build response
 	var response []dto.TeamResponse
@@ -100,11 +83,7 @@ func (h *TeamHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	// Get task count
-	var count int64
-	h.db.Model(&models.TaskDaily{}).
-		Where("team_id = ? AND deleted_at IS NULL", id).
-		Count(&count)
+	count := models.CountTasksFor(h.db, models.TaskCol.TeamID, id)
 
 	response := dto.TeamResponse{
 		ID:   team.ID,
@@ -214,11 +193,7 @@ func (h *TeamHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// Get task count
-	var count int64
-	h.db.Model(&models.TaskDaily{}).
-		Where("team_id = ? AND deleted_at IS NULL", id).
-		Count(&count)
+	count := models.CountTasksFor(h.db, models.TaskCol.TeamID, id)
 
 	response := dto.TeamResponse{
 		ID:   team.ID,
