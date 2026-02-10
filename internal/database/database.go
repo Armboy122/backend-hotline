@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"time"
 
 	"backend-hotlines3/internal/config"
 	"backend-hotlines3/internal/models"
@@ -34,8 +35,14 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 		cfg.Database.TimeZone,
 	)
 
+	// ใช้ Warn level สำหรับ release mode, Info สำหรับ debug
+	logLevel := logger.Warn
+	if cfg.Server.Mode == "debug" {
+		logLevel = logger.Info
+	}
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logLevel),
 		NamingStrategy: CamelCaseNamingStrategy{
 			schema.NamingStrategy{
 				SingularTable: true,
@@ -47,6 +54,16 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Connection Pool settings สำหรับ Neon PostgreSQL
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDB.SetMaxOpenConns(10)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
 
 	return db, nil
 }

@@ -10,6 +10,7 @@ database:
   dbname: neondb
   sslmode: require
   timezone: Asia/Bangkok
+  auto_migrate: false  # ตั้ง true เมื่อต้องการ migrate schema
 
 cloudflare:
   r2:

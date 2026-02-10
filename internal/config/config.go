@@ -18,13 +18,14 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	DBName   string `mapstructure:"dbname"`
-	SSLMode  string `mapstructure:"sslmode"`
-	TimeZone string `mapstructure:"timezone"`
+	Host        string `mapstructure:"host"`
+	Port        int    `mapstructure:"port"`
+	User        string `mapstructure:"user"`
+	Password    string `mapstructure:"password"`
+	DBName      string `mapstructure:"dbname"`
+	SSLMode     string `mapstructure:"sslmode"`
+	TimeZone    string `mapstructure:"timezone"`
+	AutoMigrate bool   `mapstructure:"auto_migrate"`
 }
 
 type CloudflareConfig struct {

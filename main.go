@@ -30,9 +30,13 @@ func main() {
 		log.Fatalf("Failed to connect database: %v", err)
 	}
 
-	// Auto migrate models
-	if err := database.AutoMigrate(db); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
+	// Auto migrate models (เฉพาะเมื่อ auto_migrate: true ใน config)
+	if cfg.Database.AutoMigrate {
+		log.Println("Running AutoMigrate...")
+		if err := database.AutoMigrate(db); err != nil {
+			log.Fatalf("Failed to migrate database: %v", err)
+		}
+		log.Println("AutoMigrate completed")
 	}
 
 	// Initialize JWT Manager

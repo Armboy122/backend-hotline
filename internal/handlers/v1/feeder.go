@@ -20,8 +20,25 @@ func NewFeederHandler(db *gorm.DB) *FeederHandler {
 
 // List - GET /v1/feeders
 func (h *FeederHandler) List(c *gin.Context) {
-	var feeders []models.Feeder
-	if err := h.db.Preload("Station.OperationCenter").Find(&feeders).Error; err != nil {
+	// ใช้ Joins แทน Preload เพื่อลดจาก 3 queries เป็น 1 query
+	type feederRow struct {
+		ID              int64  `gorm:"column:id"`
+		Code            string `gorm:"column:code"`
+		StationID       int64  `gorm:"column:stationId"`
+		StationName     string `gorm:"column:station_name"`
+		StationCodeName string `gorm:"column:station_code_name"`
+		OpCenterID      int64  `gorm:"column:op_center_id"`
+		OpCenterName    string `gorm:"column:op_center_name"`
+	}
+
+	var rows []feederRow
+	err := h.db.Table(`"Feeder"`).
+		Select(`"Feeder"."id", "Feeder"."code", "Feeder"."stationId", "Station"."name" as station_name, "Station"."codeName" as station_code_name, "OperationCenter"."id" as op_center_id, "OperationCenter"."name" as op_center_name`).
+		Joins(`LEFT JOIN "Station" ON "Station"."id" = "Feeder"."stationId"`).
+		Joins(`LEFT JOIN "OperationCenter" ON "OperationCenter"."id" = "Station"."operationId"`).
+		Find(&rows).Error
+
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -34,7 +51,7 @@ func (h *FeederHandler) List(c *gin.Context) {
 
 	// Get task counts for each feeder
 	var feederIDs []int64
-	for _, f := range feeders {
+	for _, f := range rows {
 		feederIDs = append(feederIDs, f.ID)
 	}
 
@@ -42,7 +59,7 @@ func (h *FeederHandler) List(c *gin.Context) {
 
 	// Build response
 	var response []dto.FeederResponse
-	for _, f := range feeders {
+	for _, f := range rows {
 		feederResp := dto.FeederResponse{
 			ID:        f.ID,
 			Code:      f.Code,
@@ -52,16 +69,16 @@ func (h *FeederHandler) List(c *gin.Context) {
 			},
 		}
 
-		if f.Station != nil {
+		if f.StationID != 0 {
 			feederResp.Station = &dto.StationNested{
-				ID:       f.Station.ID,
-				Name:     f.Station.Name,
-				CodeName: f.Station.CodeName,
+				ID:       f.StationID,
+				Name:     f.StationName,
+				CodeName: f.StationCodeName,
 			}
-			if f.Station.OperationCenter != nil {
+			if f.OpCenterID != 0 {
 				feederResp.Station.OperationCenter = &dto.OperationCenterNested{
-					ID:   f.Station.OperationCenter.ID,
-					Name: f.Station.OperationCenter.Name,
+					ID:   f.OpCenterID,
+					Name: f.OpCenterName,
 				}
 			}
 		}
