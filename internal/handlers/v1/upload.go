@@ -1,15 +1,17 @@
 package v1
 
 import (
-	"backend-hotlines3/internal/config"
-	"backend-hotlines3/internal/dto"
-	"backend-hotlines3/pkg/s3"
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"backend-hotlines3/internal/config"
+	"backend-hotlines3/internal/dto"
+	"backend-hotlines3/pkg/s3"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -43,8 +45,8 @@ var allowedImageTypes = map[string]bool{
 	"image/gif":  true,
 }
 
-// GetPresignedURL - POST /v1/upload/image
-// Returns a presigned URL for direct upload to R2
+// GetPresignedURL generates a presigned URL for direct image upload to Cloudflare R2.
+// The presigned URL is valid for 15 minutes.
 func (h *UploadHandler) GetPresignedURL(c *gin.Context) {
 	var req dto.UploadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -94,6 +96,7 @@ func (h *UploadHandler) GetPresignedURL(c *gin.Context) {
 
 	result, err := h.r2Client.GeneratePresignedURL(ctx, fileKey, req.FileType, 15*time.Minute)
 	if err != nil {
+		log.Printf("Failed to generate presigned URL for key %s: %v", fileKey, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -114,8 +117,7 @@ func (h *UploadHandler) GetPresignedURL(c *gin.Context) {
 	})
 }
 
-// DeleteFile - DELETE /v1/upload/:key
-// Deletes a file from R2
+// DeleteFile removes a file from Cloudflare R2 storage by its key.
 func (h *UploadHandler) DeleteFile(c *gin.Context) {
 	// The key might contain slashes, so we need to get the full path
 	fileKey := c.Param("key")
@@ -138,6 +140,7 @@ func (h *UploadHandler) DeleteFile(c *gin.Context) {
 	defer cancel()
 
 	if err := h.r2Client.DeleteObject(ctx, fileKey); err != nil {
+		log.Printf("Failed to delete file with key %s: %v", fileKey, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -156,8 +159,8 @@ func (h *UploadHandler) DeleteFile(c *gin.Context) {
 	})
 }
 
-// UploadDirect - POST /v1/upload/image (multipart/form-data)
-// Alternative: Direct upload through server (not presigned)
+// UploadDirect handles direct file uploads through the server (multipart/form-data).
+// This is an alternative to the presigned URL approach.
 func (h *UploadHandler) UploadDirect(c *gin.Context) {
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
@@ -221,6 +224,7 @@ func (h *UploadHandler) UploadDirect(c *gin.Context) {
 
 	result, err := h.r2Client.GeneratePresignedURL(ctx, fileKey, contentType, 15*time.Minute)
 	if err != nil {
+		log.Printf("Failed to generate presigned URL for direct upload %s: %v", fileKey, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{

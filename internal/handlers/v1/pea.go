@@ -3,6 +3,7 @@ package v1
 import (
 	"backend-hotlines3/internal/dto"
 	"backend-hotlines3/internal/models"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -18,15 +19,16 @@ func NewPEAHandler(db *gorm.DB) *PEAHandler {
 	return &PEAHandler{db: db}
 }
 
-// List - GET /v1/peas
+// List retrieves all PEAs with their operation center information.
 func (h *PEAHandler) List(c *gin.Context) {
 	var peas []models.PEA
-	if err := h.db.Preload("OperationCenter").Find(&peas).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Preload("OperationCenter").Find(&peas).Error; err != nil {
+		log.Printf("Failed to fetch PEAs: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching PEAs",
 			},
 		})
 		return
@@ -55,7 +57,7 @@ func (h *PEAHandler) List(c *gin.Context) {
 	})
 }
 
-// GetByID - GET /v1/peas/:id
+// GetByID retrieves a specific PEA by ID with its operation center information.
 func (h *PEAHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -70,12 +72,23 @@ func (h *PEAHandler) GetByID(c *gin.Context) {
 	}
 
 	var pea models.PEA
-	if err := h.db.Preload("OperationCenter").First(&pea, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).Preload("OperationCenter").First(&pea, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "PEA not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch PEA %d: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "PEA not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the PEA",
 			},
 		})
 		return
@@ -100,7 +113,7 @@ func (h *PEAHandler) GetByID(c *gin.Context) {
 	})
 }
 
-// Create - POST /v1/peas
+// Create creates a new PEA with the provided shortname, fullname, and operation ID.
 func (h *PEAHandler) Create(c *gin.Context) {
 	var req struct {
 		Shortname   string `json:"shortname" binding:"required"`
@@ -123,19 +136,20 @@ func (h *PEAHandler) Create(c *gin.Context) {
 		Fullname:    req.Fullname,
 		OperationID: req.OperationID,
 	}
-	if err := h.db.Create(&pea).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Create(&pea).Error; err != nil {
+		log.Printf("Failed to create PEA: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while creating the PEA",
 			},
 		})
 		return
 	}
 
 	// Reload with relations
-	h.db.Preload("OperationCenter").First(&pea, pea.ID)
+	h.db.WithContext(c.Request.Context()).Preload("OperationCenter").First(&pea, pea.ID)
 
 	response := dto.PEAResponse{
 		ID:          pea.ID,
@@ -156,7 +170,7 @@ func (h *PEAHandler) Create(c *gin.Context) {
 	})
 }
 
-// BulkCreate - POST /v1/peas/bulk
+// BulkCreate creates multiple PEAs in a single request.
 func (h *PEAHandler) BulkCreate(c *gin.Context) {
 	var req []struct {
 		Shortname   string `json:"shortname" binding:"required"`
@@ -194,12 +208,13 @@ func (h *PEAHandler) BulkCreate(c *gin.Context) {
 		})
 	}
 
-	if err := h.db.Create(&peas).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Create(&peas).Error; err != nil {
+		log.Printf("Failed to bulk create PEAs: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while creating PEAs",
 			},
 		})
 		return
@@ -210,7 +225,7 @@ func (h *PEAHandler) BulkCreate(c *gin.Context) {
 	for _, p := range peas {
 		peaIDs = append(peaIDs, p.ID)
 	}
-	h.db.Preload("OperationCenter").Where("id IN ?", peaIDs).Find(&peas)
+	h.db.WithContext(c.Request.Context()).Preload("OperationCenter").Where("id IN ?", peaIDs).Find(&peas)
 
 	var response []dto.PEAResponse
 	for _, p := range peas {
@@ -235,7 +250,7 @@ func (h *PEAHandler) BulkCreate(c *gin.Context) {
 	})
 }
 
-// Update - PUT /v1/peas/:id
+// Update updates an existing PEA's shortname, fullname, and/or operation ID.
 func (h *PEAHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -250,12 +265,23 @@ func (h *PEAHandler) Update(c *gin.Context) {
 	}
 
 	var pea models.PEA
-	if err := h.db.First(&pea, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&pea, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "PEA not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch PEA %d for update: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "PEA not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the PEA",
 			},
 		})
 		return
@@ -287,19 +313,20 @@ func (h *PEAHandler) Update(c *gin.Context) {
 		pea.OperationID = req.OperationID
 	}
 
-	if err := h.db.Save(&pea).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&pea).Error; err != nil {
+		log.Printf("Failed to update PEA %d: %v", id, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while updating the PEA",
 			},
 		})
 		return
 	}
 
 	// Reload with relations
-	h.db.Preload("OperationCenter").First(&pea, pea.ID)
+	h.db.WithContext(c.Request.Context()).Preload("OperationCenter").First(&pea, pea.ID)
 
 	response := dto.PEAResponse{
 		ID:          pea.ID,
@@ -320,7 +347,7 @@ func (h *PEAHandler) Update(c *gin.Context) {
 	})
 }
 
-// Delete - DELETE /v1/peas/:id
+// Delete removes a PEA by ID.
 func (h *PEAHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -334,13 +361,14 @@ func (h *PEAHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	result := h.db.Delete(&models.PEA{}, id)
+	result := h.db.WithContext(c.Request.Context()).Delete(&models.PEA{}, id)
 	if result.Error != nil {
+		log.Printf("Failed to delete PEA %d: %v", id, result.Error)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: result.Error.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while deleting the PEA",
 			},
 		})
 		return

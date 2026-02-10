@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	"backend-hotlines3/internal/config"
@@ -8,12 +9,14 @@ import (
 )
 
 func main() {
-	cfg, err := config.LoadConfig()
+	ctx := context.Background()
+
+	cfg, err := config.LoadConfig(ctx)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	db, err := database.Connect(cfg)
+	db, err := database.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect database: %v", err)
 	}

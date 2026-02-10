@@ -1,3 +1,5 @@
+// Package jwt provides JWT token generation and validation for authentication.
+// It supports access tokens (1h) and refresh tokens (7d) with role-based claims.
 package jwt
 
 import (

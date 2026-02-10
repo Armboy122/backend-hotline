@@ -3,6 +3,7 @@ package v1
 import (
 	"backend-hotlines3/internal/dto"
 	"backend-hotlines3/internal/models"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -18,15 +19,16 @@ func NewStationHandler(db *gorm.DB) *StationHandler {
 	return &StationHandler{db: db}
 }
 
-// List - GET /v1/stations
+// List retrieves all stations with their operation center information.
 func (h *StationHandler) List(c *gin.Context) {
 	var stations []models.Station
-	if err := h.db.Preload("OperationCenter").Find(&stations).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Preload("OperationCenter").Find(&stations).Error; err != nil {
+		log.Printf("Failed to fetch stations: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching stations",
 			},
 		})
 		return
@@ -55,7 +57,7 @@ func (h *StationHandler) List(c *gin.Context) {
 	})
 }
 
-// GetByID - GET /v1/stations/:id
+// GetByID retrieves a specific station by ID with its operation center information.
 func (h *StationHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -70,12 +72,23 @@ func (h *StationHandler) GetByID(c *gin.Context) {
 	}
 
 	var station models.Station
-	if err := h.db.Preload("OperationCenter").First(&station, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).Preload("OperationCenter").First(&station, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Station not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch station %d: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Station not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the station",
 			},
 		})
 		return
@@ -100,7 +113,7 @@ func (h *StationHandler) GetByID(c *gin.Context) {
 	})
 }
 
-// Create - POST /v1/stations
+// Create creates a new station with the provided name, code name, and operation ID.
 func (h *StationHandler) Create(c *gin.Context) {
 	var req struct {
 		Name        string `json:"name" binding:"required"`
@@ -123,19 +136,20 @@ func (h *StationHandler) Create(c *gin.Context) {
 		CodeName:    req.CodeName,
 		OperationID: req.OperationID,
 	}
-	if err := h.db.Create(&station).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Create(&station).Error; err != nil {
+		log.Printf("Failed to create station: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while creating the station",
 			},
 		})
 		return
 	}
 
 	// Reload with relations
-	h.db.Preload("OperationCenter").First(&station, station.ID)
+	h.db.WithContext(c.Request.Context()).Preload("OperationCenter").First(&station, station.ID)
 
 	response := dto.StationResponse{
 		ID:          station.ID,
@@ -156,7 +170,7 @@ func (h *StationHandler) Create(c *gin.Context) {
 	})
 }
 
-// Update - PUT /v1/stations/:id
+// Update updates an existing station's name, code name, and/or operation ID.
 func (h *StationHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -171,12 +185,23 @@ func (h *StationHandler) Update(c *gin.Context) {
 	}
 
 	var station models.Station
-	if err := h.db.First(&station, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&station, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Station not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch station %d for update: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Station not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the station",
 			},
 		})
 		return
@@ -208,19 +233,20 @@ func (h *StationHandler) Update(c *gin.Context) {
 		station.OperationID = req.OperationID
 	}
 
-	if err := h.db.Save(&station).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&station).Error; err != nil {
+		log.Printf("Failed to update station %d: %v", id, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while updating the station",
 			},
 		})
 		return
 	}
 
 	// Reload with relations
-	h.db.Preload("OperationCenter").First(&station, station.ID)
+	h.db.WithContext(c.Request.Context()).Preload("OperationCenter").First(&station, station.ID)
 
 	response := dto.StationResponse{
 		ID:          station.ID,
@@ -241,7 +267,7 @@ func (h *StationHandler) Update(c *gin.Context) {
 	})
 }
 
-// Delete - DELETE /v1/stations/:id
+// Delete removes a station by ID.
 func (h *StationHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -255,13 +281,14 @@ func (h *StationHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	result := h.db.Delete(&models.Station{}, id)
+	result := h.db.WithContext(c.Request.Context()).Delete(&models.Station{}, id)
 	if result.Error != nil {
+		log.Printf("Failed to delete station %d: %v", id, result.Error)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: result.Error.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while deleting the station",
 			},
 		})
 		return

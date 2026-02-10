@@ -1,10 +1,12 @@
 package v1
 
 import (
-	"backend-hotlines3/internal/dto"
-	"backend-hotlines3/internal/models"
+	"log"
 	"net/http"
 	"strconv"
+
+	"backend-hotlines3/internal/dto"
+	"backend-hotlines3/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -18,15 +20,16 @@ func NewJobTypeHandler(db *gorm.DB) *JobTypeHandler {
 	return &JobTypeHandler{db: db}
 }
 
-// List - GET /v1/job-types
+// List retrieves all job types with their task counts.
 func (h *JobTypeHandler) List(c *gin.Context) {
 	var jobTypes []models.JobType
-	if err := h.db.Find(&jobTypes).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Find(&jobTypes).Error; err != nil {
+		log.Printf("Failed to fetch job types: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching job types",
 			},
 		})
 		return
@@ -57,7 +60,7 @@ func (h *JobTypeHandler) List(c *gin.Context) {
 	})
 }
 
-// GetByID - GET /v1/job-types/:id
+// GetByID retrieves a specific job type by ID with its task count.
 func (h *JobTypeHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -72,12 +75,23 @@ func (h *JobTypeHandler) GetByID(c *gin.Context) {
 	}
 
 	var jobType models.JobType
-	if err := h.db.First(&jobType, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&jobType, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Job type not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch job type %d: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Job type not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the job type",
 			},
 		})
 		return
@@ -99,7 +113,7 @@ func (h *JobTypeHandler) GetByID(c *gin.Context) {
 	})
 }
 
-// Create - POST /v1/job-types
+// Create creates a new job type with the provided name.
 func (h *JobTypeHandler) Create(c *gin.Context) {
 	var req struct {
 		Name string `json:"name" binding:"required"`
@@ -116,12 +130,13 @@ func (h *JobTypeHandler) Create(c *gin.Context) {
 	}
 
 	jobType := models.JobType{Name: req.Name}
-	if err := h.db.Create(&jobType).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Create(&jobType).Error; err != nil {
+		log.Printf("Failed to create job type: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while creating the job type",
 			},
 		})
 		return
@@ -141,7 +156,7 @@ func (h *JobTypeHandler) Create(c *gin.Context) {
 	})
 }
 
-// Update - PUT /v1/job-types/:id
+// Update updates an existing job type's name.
 func (h *JobTypeHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -156,12 +171,23 @@ func (h *JobTypeHandler) Update(c *gin.Context) {
 	}
 
 	var jobType models.JobType
-	if err := h.db.First(&jobType, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&jobType, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Job type not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch job type %d for update: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Job type not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the job type",
 			},
 		})
 		return
@@ -182,12 +208,13 @@ func (h *JobTypeHandler) Update(c *gin.Context) {
 	}
 
 	jobType.Name = req.Name
-	if err := h.db.Save(&jobType).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&jobType).Error; err != nil {
+		log.Printf("Failed to update job type %d: %v", id, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while updating the job type",
 			},
 		})
 		return
@@ -209,7 +236,7 @@ func (h *JobTypeHandler) Update(c *gin.Context) {
 	})
 }
 
-// Delete - DELETE /v1/job-types/:id
+// Delete removes a job type by ID.
 func (h *JobTypeHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -223,13 +250,14 @@ func (h *JobTypeHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	result := h.db.Delete(&models.JobType{}, id)
+	result := h.db.WithContext(c.Request.Context()).Delete(&models.JobType{}, id)
 	if result.Error != nil {
+		log.Printf("Failed to delete job type %d: %v", id, result.Error)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: result.Error.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while deleting the job type",
 			},
 		})
 		return

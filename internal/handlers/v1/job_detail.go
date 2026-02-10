@@ -3,6 +3,7 @@ package v1
 import (
 	"backend-hotlines3/internal/dto"
 	"backend-hotlines3/internal/models"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -19,16 +20,17 @@ func NewJobDetailHandler(db *gorm.DB) *JobDetailHandler {
 	return &JobDetailHandler{db: db}
 }
 
-// List - GET /v1/job-details
+// List retrieves all non-deleted job details with their task counts.
 func (h *JobDetailHandler) List(c *gin.Context) {
 	var jobDetails []models.JobDetail
 	// Only get non-deleted records
-	if err := h.db.Scopes(models.JobDetailNotDeleted).Find(&jobDetails).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Scopes(models.JobDetailNotDeleted).Find(&jobDetails).Error; err != nil {
+		log.Printf("Failed to fetch job details: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching job details",
 			},
 		})
 		return
@@ -70,7 +72,7 @@ func (h *JobDetailHandler) List(c *gin.Context) {
 	})
 }
 
-// GetByID - GET /v1/job-details/:id
+// GetByID retrieves a specific job detail by ID with its task count.
 func (h *JobDetailHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -85,12 +87,23 @@ func (h *JobDetailHandler) GetByID(c *gin.Context) {
 	}
 
 	var jobDetail models.JobDetail
-	if err := h.db.First(&jobDetail, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&jobDetail, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Job detail not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch job detail %d: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Job detail not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the job detail",
 			},
 		})
 		return
@@ -122,7 +135,7 @@ func (h *JobDetailHandler) GetByID(c *gin.Context) {
 	})
 }
 
-// Create - POST /v1/job-details
+// Create creates a new job detail with the provided name and optional job type ID.
 func (h *JobDetailHandler) Create(c *gin.Context) {
 	var req struct {
 		Name      string `json:"name" binding:"required"`
@@ -146,12 +159,13 @@ func (h *JobDetailHandler) Create(c *gin.Context) {
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	if err := h.db.Create(&jobDetail).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Create(&jobDetail).Error; err != nil {
+		log.Printf("Failed to create job detail: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while creating the job detail",
 			},
 		})
 		return
@@ -175,7 +189,7 @@ func (h *JobDetailHandler) Create(c *gin.Context) {
 	})
 }
 
-// Update - PUT /v1/job-details/:id
+// Update updates an existing job detail's name and/or job type ID.
 func (h *JobDetailHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -190,12 +204,23 @@ func (h *JobDetailHandler) Update(c *gin.Context) {
 	}
 
 	var jobDetail models.JobDetail
-	if err := h.db.First(&jobDetail, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&jobDetail, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Job detail not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch job detail %d for update: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Job detail not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the job detail",
 			},
 		})
 		return
@@ -224,12 +249,13 @@ func (h *JobDetailHandler) Update(c *gin.Context) {
 	}
 	jobDetail.UpdatedAt = time.Now()
 
-	if err := h.db.Save(&jobDetail).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&jobDetail).Error; err != nil {
+		log.Printf("Failed to update job detail %d: %v", id, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while updating the job detail",
 			},
 		})
 		return
@@ -261,7 +287,7 @@ func (h *JobDetailHandler) Update(c *gin.Context) {
 	})
 }
 
-// Delete - DELETE /v1/job-details/:id (Soft Delete)
+// Delete soft deletes a job detail by ID.
 func (h *JobDetailHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -276,12 +302,23 @@ func (h *JobDetailHandler) Delete(c *gin.Context) {
 	}
 
 	var jobDetail models.JobDetail
-	if err := h.db.First(&jobDetail, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&jobDetail, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Job detail not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch job detail %d for deletion: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Job detail not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the job detail",
 			},
 		})
 		return
@@ -290,12 +327,13 @@ func (h *JobDetailHandler) Delete(c *gin.Context) {
 	// Soft delete
 	now := time.Now()
 	jobDetail.DeletedAt = &now
-	if err := h.db.Save(&jobDetail).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&jobDetail).Error; err != nil {
+		log.Printf("Failed to delete job detail %d: %v", id, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while deleting the job detail",
 			},
 		})
 		return
@@ -304,7 +342,7 @@ func (h *JobDetailHandler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// Restore - POST /v1/job-details/:id/restore
+// Restore restores a soft-deleted job detail by ID.
 func (h *JobDetailHandler) Restore(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -320,12 +358,23 @@ func (h *JobDetailHandler) Restore(c *gin.Context) {
 
 	var jobDetail models.JobDetail
 	// Find including soft deleted
-	if err := h.db.Unscoped().First(&jobDetail, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).Unscoped().First(&jobDetail, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Job detail not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch job detail %d for restore: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Job detail not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the job detail",
 			},
 		})
 		return
@@ -345,12 +394,13 @@ func (h *JobDetailHandler) Restore(c *gin.Context) {
 	// Restore
 	jobDetail.DeletedAt = nil
 	jobDetail.UpdatedAt = time.Now()
-	if err := h.db.Save(&jobDetail).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&jobDetail).Error; err != nil {
+		log.Printf("Failed to restore job detail %d: %v", id, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while restoring the job detail",
 			},
 		})
 		return

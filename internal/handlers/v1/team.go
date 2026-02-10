@@ -1,10 +1,12 @@
 package v1
 
 import (
-	"backend-hotlines3/internal/dto"
-	"backend-hotlines3/internal/models"
+	"log"
 	"net/http"
 	"strconv"
+
+	"backend-hotlines3/internal/dto"
+	"backend-hotlines3/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -18,15 +20,16 @@ func NewTeamHandler(db *gorm.DB) *TeamHandler {
 	return &TeamHandler{db: db}
 }
 
-// List - GET /v1/teams
+// List retrieves all teams with their task counts.
 func (h *TeamHandler) List(c *gin.Context) {
 	var teams []models.Team
-	if err := h.db.Find(&teams).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Find(&teams).Error; err != nil {
+		log.Printf("Failed to fetch teams: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching teams",
 			},
 		})
 		return
@@ -57,7 +60,7 @@ func (h *TeamHandler) List(c *gin.Context) {
 	})
 }
 
-// GetByID - GET /v1/teams/:id
+// GetByID retrieves a specific team by ID with its task count.
 func (h *TeamHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -72,12 +75,23 @@ func (h *TeamHandler) GetByID(c *gin.Context) {
 	}
 
 	var team models.Team
-	if err := h.db.First(&team, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&team, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Team not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch team %d: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Team not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the team",
 			},
 		})
 		return
@@ -99,7 +113,7 @@ func (h *TeamHandler) GetByID(c *gin.Context) {
 	})
 }
 
-// Create - POST /v1/teams
+// Create creates a new team with the provided name.
 func (h *TeamHandler) Create(c *gin.Context) {
 	var req struct {
 		Name string `json:"name" binding:"required"`
@@ -116,12 +130,13 @@ func (h *TeamHandler) Create(c *gin.Context) {
 	}
 
 	team := models.Team{Name: req.Name}
-	if err := h.db.Create(&team).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Create(&team).Error; err != nil {
+		log.Printf("Failed to create team: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while creating the team",
 			},
 		})
 		return
@@ -141,7 +156,7 @@ func (h *TeamHandler) Create(c *gin.Context) {
 	})
 }
 
-// Update - PUT /v1/teams/:id
+// Update updates an existing team's name.
 func (h *TeamHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -156,12 +171,23 @@ func (h *TeamHandler) Update(c *gin.Context) {
 	}
 
 	var team models.Team
-	if err := h.db.First(&team, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&team, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Team not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch team %d for update: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Team not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the team",
 			},
 		})
 		return
@@ -182,12 +208,13 @@ func (h *TeamHandler) Update(c *gin.Context) {
 	}
 
 	team.Name = req.Name
-	if err := h.db.Save(&team).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&team).Error; err != nil {
+		log.Printf("Failed to update team %d: %v", id, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while updating the team",
 			},
 		})
 		return
@@ -209,7 +236,7 @@ func (h *TeamHandler) Update(c *gin.Context) {
 	})
 }
 
-// Delete - DELETE /v1/teams/:id
+// Delete removes a team by ID.
 func (h *TeamHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -223,13 +250,14 @@ func (h *TeamHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	result := h.db.Delete(&models.Team{}, id)
+	result := h.db.WithContext(c.Request.Context()).Delete(&models.Team{}, id)
 	if result.Error != nil {
+		log.Printf("Failed to delete team %d: %v", id, result.Error)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: result.Error.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while deleting the team",
 			},
 		})
 		return

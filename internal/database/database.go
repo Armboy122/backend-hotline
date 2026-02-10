@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -23,7 +24,10 @@ func (s CamelCaseNamingStrategy) ColumnName(table, column string) string {
 	return column
 }
 
-func Connect(cfg *config.Config) (*gorm.DB, error) {
+// Connect establishes a connection to the PostgreSQL database using the provided configuration.
+// It configures connection pooling, logging level, and custom naming strategy for camelCase columns.
+// Returns a GORM database instance or an error if connection fails.
+func Connect(ctx context.Context, cfg *config.Config) (*gorm.DB, error) {
 	dsn := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=%s",
 		cfg.Database.Host,
@@ -52,13 +56,13 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Connection Pool settings สำหรับ Neon PostgreSQL
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get underlying database connection: %w", err)
 	}
 	sqlDB.SetMaxOpenConns(10)
 	sqlDB.SetMaxIdleConns(5)
@@ -68,8 +72,11 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+// AutoMigrate runs automatic migration for all models in the database.
+// It creates or updates tables to match the model definitions without data loss.
+// Returns an error if migration fails for any model.
+func AutoMigrate(ctx context.Context, db *gorm.DB) error {
+	if err := db.WithContext(ctx).AutoMigrate(
 		&models.OperationCenter{},
 		&models.PEA{},
 		&models.Station{},
@@ -79,5 +86,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Team{},
 		&models.TaskDaily{},
 		&models.User{},
-	)
+	); err != nil {
+		return fmt.Errorf("failed to auto-migrate database: %w", err)
+	}
+	return nil
 }

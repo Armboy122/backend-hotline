@@ -3,6 +3,7 @@ package v1
 import (
 	"backend-hotlines3/internal/dto"
 	"backend-hotlines3/internal/models"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -18,15 +19,16 @@ func NewOperationCenterHandler(db *gorm.DB) *OperationCenterHandler {
 	return &OperationCenterHandler{db: db}
 }
 
-// List - GET /v1/operation-centers
+// List retrieves all operation centers.
 func (h *OperationCenterHandler) List(c *gin.Context) {
 	var operationCenters []models.OperationCenter
-	if err := h.db.Find(&operationCenters).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Find(&operationCenters).Error; err != nil {
+		log.Printf("Failed to fetch operation centers: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching operation centers",
 			},
 		})
 		return
@@ -46,7 +48,7 @@ func (h *OperationCenterHandler) List(c *gin.Context) {
 	})
 }
 
-// GetByID - GET /v1/operation-centers/:id
+// GetByID retrieves a specific operation center by ID.
 func (h *OperationCenterHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -61,12 +63,23 @@ func (h *OperationCenterHandler) GetByID(c *gin.Context) {
 	}
 
 	var operationCenter models.OperationCenter
-	if err := h.db.First(&operationCenter, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&operationCenter, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Operation center not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch operation center %d: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Operation center not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the operation center",
 			},
 		})
 		return
@@ -81,7 +94,7 @@ func (h *OperationCenterHandler) GetByID(c *gin.Context) {
 	})
 }
 
-// Create - POST /v1/operation-centers
+// Create creates a new operation center with the provided name.
 func (h *OperationCenterHandler) Create(c *gin.Context) {
 	var req struct {
 		Name string `json:"name" binding:"required"`
@@ -98,12 +111,13 @@ func (h *OperationCenterHandler) Create(c *gin.Context) {
 	}
 
 	operationCenter := models.OperationCenter{Name: req.Name}
-	if err := h.db.Create(&operationCenter).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Create(&operationCenter).Error; err != nil {
+		log.Printf("Failed to create operation center: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while creating the operation center",
 			},
 		})
 		return
@@ -118,7 +132,7 @@ func (h *OperationCenterHandler) Create(c *gin.Context) {
 	})
 }
 
-// Update - PUT /v1/operation-centers/:id
+// Update updates an existing operation center's name.
 func (h *OperationCenterHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -133,12 +147,23 @@ func (h *OperationCenterHandler) Update(c *gin.Context) {
 	}
 
 	var operationCenter models.OperationCenter
-	if err := h.db.First(&operationCenter, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
+	if err := h.db.WithContext(c.Request.Context()).First(&operationCenter, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Operation center not found",
+				},
+			})
+			return
+		}
+		log.Printf("Failed to fetch operation center %d for update: %v", id, err)
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Operation center not found",
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while fetching the operation center",
 			},
 		})
 		return
@@ -159,12 +184,13 @@ func (h *OperationCenterHandler) Update(c *gin.Context) {
 	}
 
 	operationCenter.Name = req.Name
-	if err := h.db.Save(&operationCenter).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&operationCenter).Error; err != nil {
+		log.Printf("Failed to update operation center %d: %v", id, err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: err.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while updating the operation center",
 			},
 		})
 		return
@@ -179,7 +205,7 @@ func (h *OperationCenterHandler) Update(c *gin.Context) {
 	})
 }
 
-// Delete - DELETE /v1/operation-centers/:id
+// Delete removes an operation center by ID.
 func (h *OperationCenterHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -193,13 +219,14 @@ func (h *OperationCenterHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	result := h.db.Delete(&models.OperationCenter{}, id)
+	result := h.db.WithContext(c.Request.Context()).Delete(&models.OperationCenter{}, id)
 	if result.Error != nil {
+		log.Printf("Failed to delete operation center %d: %v", id, result.Error)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
-				Message: result.Error.Error(),
+				Code:    "INTERNAL_ERROR",
+				Message: "An error occurred while deleting the operation center",
 			},
 		})
 		return

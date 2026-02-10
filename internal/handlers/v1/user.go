@@ -4,6 +4,7 @@ import (
 	"backend-hotlines3/internal/dto"
 	"backend-hotlines3/internal/models"
 	"net/http"
+	"log"
 	"strconv"
 	"time"
 
@@ -23,11 +24,12 @@ func NewUserHandler(db *gorm.DB) *UserHandler {
 // List - GET /v1/users (admin only)
 func (h *UserHandler) List(c *gin.Context) {
 	var users []models.User
-	if err := h.db.Preload("Team").Find(&users).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Preload("Team").Find(&users).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
@@ -73,7 +75,7 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := h.db.Preload("Team").First(&user, id).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Preload("Team").First(&user, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, dto.StandardResponse{
 				Success: false,
@@ -87,7 +89,7 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
@@ -154,22 +156,24 @@ func (h *UserHandler) Create(c *gin.Context) {
 		IsActive: isActive,
 	}
 
-	if err := h.db.Create(&user).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Create(&user).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
 		return
 	}
 
-	if err := h.db.Preload("Team").First(&user, user.ID).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Preload("Team").First(&user, user.ID).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
@@ -207,7 +211,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := h.db.First(&user, id).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).First(&user, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, dto.StandardResponse{
 				Success: false,
@@ -221,7 +225,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
@@ -253,22 +257,24 @@ func (h *UserHandler) Update(c *gin.Context) {
 		user.IsActive = *req.IsActive
 	}
 
-	if err := h.db.Save(&user).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&user).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
 		return
 	}
 
-	if err := h.db.Preload("Team").First(&user, user.ID).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Preload("Team").First(&user, user.ID).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
@@ -322,12 +328,12 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	result := h.db.Delete(&models.User{}, id)
+	result := h.db.WithContext(c.Request.Context()).Delete(&models.User{}, id)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: result.Error.Error(),
 			},
 		})
@@ -387,7 +393,7 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := h.db.First(&user, id).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).First(&user, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -422,11 +428,12 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 	}
 
 	user.Password = string(hashedPassword)
-	if err := h.db.Save(&user).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&user).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,14 +14,16 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+
 	// โหลด configuration
-	cfg, err := config.LoadConfig()
+	cfg, err := config.LoadConfig(ctx)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	// เชื่อมต่อ database (ไม่ auto migrate)
-	db, err := database.Connect(cfg)
+	db, err := database.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect database: %v", err)
 	}

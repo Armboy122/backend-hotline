@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -17,14 +18,16 @@ func main() {
 	dropTables := flag.Bool("drop", false, "Drop all existing tables before migration")
 	flag.Parse()
 
+	ctx := context.Background()
+
 	// โหลด configuration
-	cfg, err := config.LoadConfig()
+	cfg, err := config.LoadConfig(ctx)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	// เชื่อมต่อ database
-	db, err := database.Connect(cfg)
+	db, err := database.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect database: %v", err)
 	}
@@ -40,7 +43,7 @@ func main() {
 
 	// Auto migrate models
 	log.Println("Creating tables...")
-	if err := database.AutoMigrate(db); err != nil {
+	if err := database.AutoMigrate(ctx, db); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"backend-hotlines3/internal/dto"
 	"backend-hotlines3/internal/models"
 	"net/http"
+	"log"
 	"strconv"
 	"time"
 
@@ -146,10 +147,11 @@ func (h *TaskHandler) List(c *gin.Context) {
 		Offset(offset).
 		Limit(limit).
 		Find(&tasks).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
@@ -261,11 +263,12 @@ func (h *TaskHandler) Create(c *gin.Context) {
 		task.Longitude = &lng
 	}
 
-	if err := h.db.Create(&task).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Create(&task).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
@@ -301,7 +304,7 @@ func (h *TaskHandler) Update(c *gin.Context) {
 	}
 
 	var task models.TaskDaily
-	if err := h.db.First(&task, id).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -375,11 +378,12 @@ func (h *TaskHandler) Update(c *gin.Context) {
 
 	task.UpdatedAt = time.Now()
 
-	if err := h.db.Save(&task).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&task).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
@@ -415,7 +419,7 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 	}
 
 	var task models.TaskDaily
-	if err := h.db.First(&task, id).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -429,11 +433,12 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 	// Soft delete
 	now := time.Now()
 	task.DeletedAt = &now
-	if err := h.db.Save(&task).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Save(&task).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
@@ -478,10 +483,11 @@ func (h *TaskHandler) ListByFilter(c *gin.Context) {
 		Preload("Feeder.Station.OperationCenter").
 		Order("WorkDate DESC, CreatedAt DESC").
 		Find(&tasks).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})
@@ -530,10 +536,11 @@ func (h *TaskHandler) ListByTeam(c *gin.Context) {
 		Preload("Feeder.Station.OperationCenter").
 		Order("WorkDate DESC, CreatedAt DESC").
 		Find(&tasks).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: err.Error(),
 			},
 		})

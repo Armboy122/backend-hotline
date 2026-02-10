@@ -7,6 +7,7 @@ import (
 	"backend-hotlines3/pkg/jwt"
 	"backend-hotlines3/pkg/password"
 	"net/http"
+	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -35,7 +36,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	// Check if user already exists
 	var existingUser models.User
-	if err := h.db.Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
+	if err := h.db.WithContext(c.Request.Context()).Where("username = ?", req.Username).First(&existingUser).Error; err == nil {
 		c.JSON(http.StatusConflict, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -85,11 +86,12 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		user.IsActive = *req.IsActive
 	}
 
-	if err := h.db.Create(&user).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Create(&user).Error; err != nil {
+		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
-				Code:    "DATABASE_ERROR",
+				Code:    "INTERNAL_ERROR",
 				Message: "Failed to create user",
 			},
 		})
@@ -118,7 +120,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	var user models.User
 	// Login by username only
-	if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Where("username = ?", req.Username).First(&user).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -153,7 +155,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	now := time.Now()
 	user.LastLogin = &now
-	h.db.Save(&user)
+	h.db.WithContext(c.Request.Context()).Save(&user)
 
 	accessToken, refreshToken, err := h.jwtManager.GenerateTokenPair(user.ID, user.Username, user.Role)
 	if err != nil {
@@ -221,7 +223,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := h.db.First(&user, claims.UserID).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).First(&user, claims.UserID).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -281,7 +283,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := h.db.Preload("Team").First(&user, userID).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Preload("Team").First(&user, userID).Error; err != nil {
 		c.JSON(http.StatusNotFound, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{

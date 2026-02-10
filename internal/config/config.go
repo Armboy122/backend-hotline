@@ -1,6 +1,9 @@
 package config
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/spf13/viper"
 )
 
@@ -52,7 +55,10 @@ type CORSConfig struct {
 	AllowedHeaders []string `mapstructure:"allowed_headers"`
 }
 
-func LoadConfig() (*Config, error) {
+// LoadConfig reads the application configuration from config.yaml file.
+// It searches for the config file in the current directory and parent directories.
+// Returns a Config struct populated with values from the YAML file, or an error if loading fails.
+func LoadConfig(ctx context.Context) (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
@@ -61,12 +67,12 @@ func LoadConfig() (*Config, error) {
 
 	// อ่าน config file
 	if err := viper.ReadInConfig(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
 	return &config, nil

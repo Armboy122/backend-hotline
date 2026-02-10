@@ -1,3 +1,5 @@
+// Package s3 provides access to Cloudflare R2 storage for file uploads.
+// It generates presigned URLs for direct client uploads and handles file deletion.
 package s3
 
 import (

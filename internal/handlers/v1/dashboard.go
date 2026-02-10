@@ -58,7 +58,7 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 	var topTeam *dto.TopTeam
 	if topTeamResult.TeamID != 0 {
 		var team models.Team
-		h.db.First(&team, topTeamResult.TeamID)
+		h.db.WithContext(c.Request.Context()).First(&team, topTeamResult.TeamID)
 		topTeam = &dto.TopTeam{
 			ID:    team.ID,
 			Name:  team.Name,
@@ -109,7 +109,7 @@ func (h *DashboardHandler) TopJobs(c *gin.Context) {
 	var response []dto.TopJobResponse
 	for _, r := range results {
 		var jobDetail models.JobDetail
-		h.db.Preload("JobType").First(&jobDetail, r.JobDetailID)
+		h.db.WithContext(c.Request.Context()).Preload("JobType").First(&jobDetail, r.JobDetailID)
 
 		jobTypeName := ""
 		if jobDetail.JobType != nil {
@@ -163,7 +163,7 @@ func (h *DashboardHandler) TopFeeders(c *gin.Context) {
 	var response []dto.TopFeederResponse
 	for _, r := range results {
 		var feeder models.Feeder
-		h.db.Preload("Station").First(&feeder, r.FeederID)
+		h.db.WithContext(c.Request.Context()).Preload("Station").First(&feeder, r.FeederID)
 
 		stationName := ""
 		if feeder.Station != nil {
@@ -215,7 +215,7 @@ func (h *DashboardHandler) FeederMatrix(c *gin.Context) {
 
 	// Get feeder info
 	var feeder models.Feeder
-	if err := h.db.Preload("Station").First(&feeder, feederID).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Preload("Station").First(&feeder, feederID).Error; err != nil {
 		c.JSON(http.StatusNotFound, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -247,7 +247,7 @@ func (h *DashboardHandler) FeederMatrix(c *gin.Context) {
 	var totalCount int64
 	for _, r := range results {
 		var jobDetail models.JobDetail
-		h.db.Preload("JobType").First(&jobDetail, r.JobDetailID)
+		h.db.WithContext(c.Request.Context()).Preload("JobType").First(&jobDetail, r.JobDetailID)
 
 		jobTypeName := ""
 		if jobDetail.JobType != nil {
@@ -319,7 +319,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	topJobType := ""
 	if topJobTypeResult.JobTypeID != 0 {
 		var jobType models.JobType
-		h.db.First(&jobType, topJobTypeResult.JobTypeID)
+		h.db.WithContext(c.Request.Context()).First(&jobType, topJobTypeResult.JobTypeID)
 		topJobType = jobType.Name
 	}
 
@@ -340,7 +340,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	topFeeder := ""
 	if topFeederResult.FeederID != 0 {
 		var feeder models.Feeder
-		h.db.First(&feeder, topFeederResult.FeederID)
+		h.db.WithContext(c.Request.Context()).First(&feeder, topFeederResult.FeederID)
 		topFeeder = feeder.Code
 	}
 
@@ -366,7 +366,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 
 	for _, r := range feederResults {
 		var feeder models.Feeder
-		h.db.First(&feeder, r.FeederID)
+		h.db.WithContext(c.Request.Context()).First(&feeder, r.FeederID)
 		tasksByFeeder = append(tasksByFeeder, dto.ChartItem{
 			Name:  feeder.Code,
 			Value: r.Count,
@@ -387,7 +387,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 
 	for _, r := range jobTypeResults {
 		var jobType models.JobType
-		h.db.First(&jobType, r.JobTypeID)
+		h.db.WithContext(c.Request.Context()).First(&jobType, r.JobTypeID)
 		tasksByJobType = append(tasksByJobType, dto.ChartItem{
 			Name:  jobType.Name,
 			Value: r.Count,
@@ -408,7 +408,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 
 	for _, r := range teamResults {
 		var team models.Team
-		h.db.First(&team, r.TeamID)
+		h.db.WithContext(c.Request.Context()).First(&team, r.TeamID)
 		tasksByTeam = append(tasksByTeam, dto.ChartItem{
 			Name:  team.Name,
 			Value: r.Count,

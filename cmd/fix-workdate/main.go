@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	"backend-hotlines3/internal/config"
@@ -8,8 +9,9 @@ import (
 )
 
 func main() {
-	cfg, _ := config.LoadConfig()
-	db, _ := database.Connect(cfg)
+	ctx := context.Background()
+	cfg, _ := config.LoadConfig(ctx)
+	db, _ := database.Connect(ctx, cfg)
 
 	// Rename workDate to workdate
 	log.Println("Renaming workDate to workdate...")

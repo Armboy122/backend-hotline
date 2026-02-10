@@ -1,3 +1,5 @@
+// Package models defines the database models for the Hotline maintenance system.
+// It includes 9 models for managing electrical network maintenance tasks.
 package models
 
 import (

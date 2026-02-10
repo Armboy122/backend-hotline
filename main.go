@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"backend-hotlines3/internal/config"
@@ -15,8 +20,12 @@ import (
 )
 
 func main() {
+	// Create root context for application startup
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// โหลด configuration
-	cfg, err := config.LoadConfig()
+	cfg, err := config.LoadConfig(ctx)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
@@ -25,7 +34,7 @@ func main() {
 	gin.SetMode(cfg.Server.Mode)
 
 	// เชื่อมต่อ database
-	db, err := database.Connect(cfg)
+	db, err := database.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect database: %v", err)
 	}
@@ -33,7 +42,7 @@ func main() {
 	// Auto migrate models (เฉพาะเมื่อ auto_migrate: true ใน config)
 	if cfg.Database.AutoMigrate {
 		log.Println("Running AutoMigrate...")
-		if err := database.AutoMigrate(db); err != nil {
+		if err := database.AutoMigrate(ctx, db); err != nil {
 			log.Fatalf("Failed to migrate database: %v", err)
 		}
 		log.Println("AutoMigrate completed")
@@ -57,10 +66,38 @@ func main() {
 	// Global Recovery Middleware (Handle Panics)
 	r.Use(middleware.RecoveryMiddleware())
 
-	// เริ่ม server
+	// สร้าง HTTP server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
-	log.Printf("Server starting on %s", addr)
-	if err := r.Run(addr); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
 	}
+
+	// Setup graceful shutdown
+	// Channel to listen for OS signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start server in a goroutine
+	go func() {
+		log.Printf("Server starting on %s", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	sig := <-sigChan
+	log.Printf("Received signal: %v. Shutting down gracefully...", sig)
+
+	// Create a deadline for shutdown
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	// Attempt graceful shutdown
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("Server exited")
 }

@@ -84,7 +84,19 @@ func (m *AuthMiddleware) RequireRole(roles ...string) gin.HandlerFunc {
 			return
 		}
 
-		roleStr := userRole.(string)
+		roleStr, ok := userRole.(string)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "INVALID_TOKEN",
+					Message: "Invalid role claim in token",
+				},
+			})
+			c.Abort()
+			return
+		}
+
 		hasPermission := false
 		for _, role := range roles {
 			if roleStr == role {
