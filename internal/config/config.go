@@ -44,9 +44,9 @@ type R2Config struct {
 }
 
 type JWTConfig struct {
-	Secret              string `mapstructure:"secret"`
-	AccessTokenExpiry   string `mapstructure:"access_token_expiry"`
-	RefreshTokenExpiry  string `mapstructure:"refresh_token_expiry"`
+	Secret             string `mapstructure:"secret"`
+	AccessTokenExpiry  string `mapstructure:"access_token_expiry"`
+	RefreshTokenExpiry string `mapstructure:"refresh_token_expiry"`
 }
 
 type CORSConfig struct {

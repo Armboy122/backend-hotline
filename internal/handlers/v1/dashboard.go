@@ -97,7 +97,7 @@ func (h *DashboardHandler) TopJobs(c *gin.Context) {
 	var results []JobCount
 
 	query := h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobDetailID+" as JobDetailID, count(*) as count").
+		Select(models.TaskCol.JobDetailID + " as JobDetailID, count(*) as count").
 		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID))
 
 	query.Group(models.TaskCol.JobDetailID).
@@ -150,7 +150,7 @@ func (h *DashboardHandler) TopFeeders(c *gin.Context) {
 	var results []FeederCount
 
 	query := h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+		Select(models.TaskCol.FeederID + " as FeederID, count(*) as count").
 		Scopes(models.TaskFeederNotNull).
 		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID))
 
@@ -300,7 +300,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	// Active teams
 	var activeTeams int64
 	h.db.Model(&models.TaskDaily{}).
-		Select("DISTINCT "+models.TaskCol.TeamID).
+		Select("DISTINCT " + models.TaskCol.TeamID).
 		Count(&activeTeams)
 
 	// Top job type
@@ -310,7 +310,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	}
 	var topJobTypeResult JobTypeCount
 	h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobTypeID+" as JobTypeID, count(*) as count").
+		Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
 		Group(models.TaskCol.JobTypeID).
 		Order("count DESC").
 		Limit(1).
@@ -330,7 +330,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	}
 	var topFeederResult FeederCount
 	h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+		Select(models.TaskCol.FeederID + " as FeederID, count(*) as count").
 		Scopes(models.TaskFeederNotNull).
 		Group(models.TaskCol.FeederID).
 		Order("count DESC").
@@ -357,7 +357,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count    int64
 	}
 	h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+		Select(models.TaskCol.FeederID + " as FeederID, count(*) as count").
 		Scopes(models.TaskFeederNotNull).
 		Group(models.TaskCol.FeederID).
 		Order("count DESC").
@@ -380,7 +380,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count     int64
 	}
 	h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobTypeID+" as JobTypeID, count(*) as count").
+		Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
 		Group(models.TaskCol.JobTypeID).
 		Order("count DESC").
 		Find(&jobTypeResults)
@@ -401,7 +401,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count  int64
 	}
 	h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.TeamID+" as TeamID, count(*) as count").
+		Select(models.TaskCol.TeamID + " as TeamID, count(*) as count").
 		Group(models.TaskCol.TeamID).
 		Order("count DESC").
 		Find(&teamResults)
@@ -422,7 +422,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count int64
 	}
 	dateQuery := h.db.Model(&models.TaskDaily{}).
-		Select("TO_CHAR("+models.TaskCol.WorkDate+", 'YYYY-MM-DD') as date, count(*) as count").
+		Select("TO_CHAR(" + models.TaskCol.WorkDate + ", 'YYYY-MM-DD') as date, count(*) as count").
 		Scopes(models.TaskByDateRange(startDate, endDate))
 
 	dateQuery.Group("date").
