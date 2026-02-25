@@ -17,8 +17,8 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 	// CORS middleware
 	r.Use(CORSMiddleware(cfg))
 
-	// Health check
-	r.GET("/health", func(c *gin.Context) {
+	// Health check — cache 1 minute
+	r.GET("/health", middleware.CachePublic(60), func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":  "ok",
 			"message": "Server is running",
@@ -33,7 +33,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 		// Auth middleware
 		authMw := middleware.NewAuthMiddleware(jwtManager)
 
-		// Auth Routes
+		// Auth Routes — no CDN cache (mutations + user-specific)
 		authHandler := v1.NewAuthHandler(db, jwtManager)
 		authGroup := apiV1.Group("/auth")
 		{
@@ -41,83 +41,83 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			authGroup.POST("/register", authHandler.Register)
 			authGroup.POST("/refresh", authHandler.RefreshToken)
 			authGroup.POST("/logout", authMw.RequireAuth(), authHandler.Logout)
-			authGroup.GET("/me", authMw.RequireAuth(), authHandler.Me)
+			authGroup.GET("/me", authMw.RequireAuth(), middleware.CachePrivate(), authHandler.Me)
 		}
 
-		// Teams
+		// Teams — cache 2 minutes (has task counts that update with new tasks)
 		teamsV1 := apiV1.Group("/teams")
 		{
 			handler := v1.NewTeamHandler(db)
-			teamsV1.GET("", handler.List)
-			teamsV1.GET("/:id", handler.GetByID)
+			teamsV1.GET("", middleware.CachePublic(120), handler.List)
+			teamsV1.GET("/:id", middleware.CachePublic(120), handler.GetByID)
 			teamsV1.POST("", handler.Create)
 			teamsV1.PUT("/:id", handler.Update)
 			teamsV1.DELETE("/:id", handler.Delete)
 		}
 
-		// Job Types
+		// Job Types — cache 5 minutes (admin-only edits, changes infrequently)
 		jobTypesV1 := apiV1.Group("/job-types")
 		{
 			handler := v1.NewJobTypeHandler(db)
-			jobTypesV1.GET("", handler.List)
-			jobTypesV1.GET("/:id", handler.GetByID)
+			jobTypesV1.GET("", middleware.CachePublic(300), handler.List)
+			jobTypesV1.GET("/:id", middleware.CachePublic(300), handler.GetByID)
 			jobTypesV1.POST("", handler.Create)
 			jobTypesV1.PUT("/:id", handler.Update)
 			jobTypesV1.DELETE("/:id", handler.Delete)
 		}
 
-		// Job Details
+		// Job Details — cache 5 minutes (admin-only edits, changes infrequently)
 		jobDetailsV1 := apiV1.Group("/job-details")
 		{
 			handler := v1.NewJobDetailHandler(db)
-			jobDetailsV1.GET("", handler.List)
-			jobDetailsV1.GET("/:id", handler.GetByID)
+			jobDetailsV1.GET("", middleware.CachePublic(300), handler.List)
+			jobDetailsV1.GET("/:id", middleware.CachePublic(300), handler.GetByID)
 			jobDetailsV1.POST("", handler.Create)
 			jobDetailsV1.PUT("/:id", handler.Update)
 			jobDetailsV1.DELETE("/:id", handler.Delete)
 			jobDetailsV1.POST("/:id/restore", handler.Restore)
 		}
 
-		// Feeders
+		// Feeders — cache 2 minutes (has task counts that update with new tasks)
 		feedersV1 := apiV1.Group("/feeders")
 		{
 			handler := v1.NewFeederHandler(db)
-			feedersV1.GET("", handler.List)
-			feedersV1.GET("/:id", handler.GetByID)
+			feedersV1.GET("", middleware.CachePublic(120), handler.List)
+			feedersV1.GET("/:id", middleware.CachePublic(120), handler.GetByID)
 			feedersV1.POST("", handler.Create)
 			feedersV1.PUT("/:id", handler.Update)
 			feedersV1.DELETE("/:id", handler.Delete)
 		}
 
-		// Stations
+		// Stations — cache 10 minutes (static reference data)
 		stationsV1 := apiV1.Group("/stations")
 		{
 			handler := v1.NewStationHandler(db)
-			stationsV1.GET("", handler.List)
-			stationsV1.GET("/:id", handler.GetByID)
+			stationsV1.GET("", middleware.CachePublic(600), handler.List)
+			stationsV1.GET("/:id", middleware.CachePublic(600), handler.GetByID)
 			stationsV1.POST("", handler.Create)
 			stationsV1.PUT("/:id", handler.Update)
 			stationsV1.DELETE("/:id", handler.Delete)
 		}
 
-		// PEAs
+		// PEAs — cache 10 minutes (static reference data)
 		peasV1 := apiV1.Group("/peas")
 		{
 			handler := v1.NewPEAHandler(db)
-			peasV1.GET("", handler.List)
-			peasV1.GET("/:id", handler.GetByID)
+			peasV1.GET("", middleware.CachePublic(600), handler.List)
+			peasV1.GET("/:id", middleware.CachePublic(600), handler.GetByID)
 			peasV1.POST("", handler.Create)
 			peasV1.POST("/bulk", handler.BulkCreate)
 			peasV1.PUT("/:id", handler.Update)
 			peasV1.DELETE("/:id", handler.Delete)
 		}
 
-		// Operation Centers
+		// Operation Centers — cache 10 minutes (static reference data, rarely changes)
 		operationCentersV1 := apiV1.Group("/operation-centers")
 		{
 			handler := v1.NewOperationCenterHandler(db)
-			operationCentersV1.GET("", handler.List)
-			operationCentersV1.GET("/:id", handler.GetByID)
+			operationCentersV1.GET("", middleware.CachePublic(600), handler.List)
+			operationCentersV1.GET("/:id", middleware.CachePublic(600), handler.GetByID)
 			operationCentersV1.POST("", handler.Create)
 			operationCentersV1.PUT("/:id", handler.Update)
 			operationCentersV1.DELETE("/:id", handler.Delete)
@@ -127,16 +127,16 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 		tasksV1 := apiV1.Group("/tasks")
 		{
 			handler := v1.NewTaskHandler(db)
-			tasksV1.GET("", handler.List)
-			tasksV1.GET("/by-team", handler.ListByTeam)
-			tasksV1.GET("/by-filter", handler.ListByFilter)
-			tasksV1.GET("/:id", handler.GetByID)
+			tasksV1.GET("", middleware.CachePublic(60), handler.List)           // cache 1 min (paginated, dynamic filters)
+			tasksV1.GET("/by-team", middleware.CachePublic(120), handler.ListByTeam)   // cache 2 min
+			tasksV1.GET("/by-filter", middleware.CachePublic(180), handler.ListByFilter) // cache 3 min (per year/month combo)
+			tasksV1.GET("/:id", middleware.CachePublic(60), handler.GetByID)    // cache 1 min
 			tasksV1.POST("", handler.Create)
 			tasksV1.PUT("/:id", handler.Update)
 			tasksV1.DELETE("/:id", handler.Delete)
 		}
 
-		// Upload
+		// Upload — no cache (presigned URLs are unique per request)
 		uploadHandler, err := v1.NewUploadHandler(cfg)
 		if err != nil {
 			log.Printf("Warning: Upload handler initialization failed: %v", err)
@@ -148,18 +148,18 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			}
 		}
 
-		// Dashboard
+		// Dashboard — cache 5 minutes (heavy aggregation queries, stale data acceptable)
 		dashboardV1 := apiV1.Group("/dashboard")
 		{
 			handler := v1.NewDashboardHandler(db)
-			dashboardV1.GET("/summary", handler.Summary)
-			dashboardV1.GET("/top-jobs", handler.TopJobs)
-			dashboardV1.GET("/top-feeders", handler.TopFeeders)
-			dashboardV1.GET("/feeder-matrix", handler.FeederMatrix)
-			dashboardV1.GET("/stats", handler.Stats)
+			dashboardV1.GET("/summary", middleware.CachePublic(300), handler.Summary)
+			dashboardV1.GET("/top-jobs", middleware.CachePublic(300), handler.TopJobs)
+			dashboardV1.GET("/top-feeders", middleware.CachePublic(300), handler.TopFeeders)
+			dashboardV1.GET("/feeder-matrix", middleware.CachePublic(300), handler.FeederMatrix)
+			dashboardV1.GET("/stats", middleware.CachePublic(300), handler.Stats)
 		}
 
-		// Users
+		// Users — no cache (admin-only + user-specific context)
 		usersV1 := apiV1.Group("/users")
 		{
 			handler := v1.NewUserHandler(db)
@@ -171,8 +171,8 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			adminUsers := usersV1.Group("")
 			adminUsers.Use(authMw.RequireRole("admin"))
 			{
-				adminUsers.GET("", handler.List)
-				adminUsers.GET("/:id", handler.GetByID)
+				adminUsers.GET("", middleware.CachePrivate(), handler.List)
+				adminUsers.GET("/:id", middleware.CachePrivate(), handler.GetByID)
 				adminUsers.POST("", handler.Create)
 				adminUsers.PUT("/:id", handler.Update)
 				adminUsers.DELETE("/:id", handler.Delete)
