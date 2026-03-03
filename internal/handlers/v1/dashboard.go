@@ -3,6 +3,7 @@ package v1
 import (
 	"backend-hotlines3/internal/dto"
 	"backend-hotlines3/internal/models"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -20,13 +21,15 @@ func NewDashboardHandler(db *gorm.DB) *DashboardHandler {
 
 // Summary - GET /v1/dashboard/summary
 func (h *DashboardHandler) Summary(c *gin.Context) {
+	ctx := c.Request.Context()
 	year := c.Query("year")
 	month := c.Query("month")
 	teamID := c.Query("teamId")
 	jobTypeID := c.Query("jobTypeId")
 
 	// Build base query
-	query := h.db.Model(&models.TaskDaily{}).
+	query := h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Scopes(models.TaskNotDeleted).
 		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID))
 
 	// Total tasks
@@ -35,11 +38,11 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 
 	// Total job types used
 	var totalJobTypes int64
-	h.db.Model(&models.JobType{}).Count(&totalJobTypes)
+	h.db.WithContext(ctx).Model(&models.JobType{}).Count(&totalJobTypes)
 
 	// Total feeders used
 	var totalFeeders int64
-	h.db.Model(&models.Feeder{}).Count(&totalFeeders)
+	h.db.WithContext(ctx).Model(&models.Feeder{}).Count(&totalFeeders)
 
 	// Top team
 	type TeamCount struct {
@@ -47,9 +50,9 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 		Count  int64
 	}
 	var topTeamResult TeamCount
-	h.db.Model(&models.TaskDaily{}).
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
 		Select(models.TaskCol.TeamID+" as TeamID, count(*) as count").
-		Scopes(models.TaskByYear(year), models.TaskByMonth(month)).
+		Scopes(models.TaskNotDeleted, models.TaskByYear(year), models.TaskByMonth(month)).
 		Group(models.TaskCol.TeamID).
 		Order("count DESC").
 		Limit(1).
@@ -58,7 +61,7 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 	var topTeam *dto.TopTeam
 	if topTeamResult.TeamID != 0 {
 		var team models.Team
-		h.db.WithContext(c.Request.Context()).First(&team, topTeamResult.TeamID)
+		h.db.WithContext(ctx).First(&team, topTeamResult.TeamID)
 		topTeam = &dto.TopTeam{
 			ID:    team.ID,
 			Name:  team.Name,
@@ -79,6 +82,7 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 
 // TopJobs - GET /v1/dashboard/top-jobs
 func (h *DashboardHandler) TopJobs(c *gin.Context) {
+	ctx := c.Request.Context()
 	year := c.Query("year")
 	month := c.Query("month")
 	teamID := c.Query("teamId")
@@ -89,36 +93,55 @@ func (h *DashboardHandler) TopJobs(c *gin.Context) {
 		limit = 10
 	}
 
-	// Build query
+	// Aggregate query
 	type JobCount struct {
 		JobDetailID int64
 		Count       int64
 	}
 	var results []JobCount
 
-	query := h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobDetailID + " as JobDetailID, count(*) as count").
-		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID))
-
-	query.Group(models.TaskCol.JobDetailID).
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Select(models.TaskCol.JobDetailID+" as JobDetailID, count(*) as count").
+		Scopes(models.TaskNotDeleted).
+		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID)).
+		Group(models.TaskCol.JobDetailID).
 		Order("count DESC").
 		Limit(limit).
 		Find(&results)
 
-	// Get job details with job types
-	var response []dto.TopJobResponse
+	if len(results) == 0 {
+		c.JSON(http.StatusOK, dto.StandardResponse{Success: true, Data: []dto.TopJobResponse{}})
+		return
+	}
+
+	// Batch load job details (eliminates N+1)
+	ids := make([]int64, len(results))
+	for i, r := range results {
+		ids[i] = r.JobDetailID
+	}
+	var jobDetails []models.JobDetail
+	h.db.WithContext(ctx).Preload("JobType").Where("id IN ?", ids).Find(&jobDetails)
+
+	// Build lookup map
+	detailMap := make(map[int64]*models.JobDetail, len(jobDetails))
+	for i := range jobDetails {
+		detailMap[jobDetails[i].ID] = &jobDetails[i]
+	}
+
+	// Build response preserving order from aggregate
+	response := make([]dto.TopJobResponse, 0, len(results))
 	for _, r := range results {
-		var jobDetail models.JobDetail
-		h.db.WithContext(c.Request.Context()).Preload("JobType").First(&jobDetail, r.JobDetailID)
-
-		jobTypeName := ""
-		if jobDetail.JobType != nil {
-			jobTypeName = jobDetail.JobType.Name
+		jd := detailMap[r.JobDetailID]
+		if jd == nil {
+			continue
 		}
-
+		jobTypeName := ""
+		if jd.JobType != nil {
+			jobTypeName = jd.JobType.Name
+		}
 		response = append(response, dto.TopJobResponse{
-			ID:          jobDetail.ID,
-			Name:        jobDetail.Name,
+			ID:          jd.ID,
+			Name:        jd.Name,
 			Count:       r.Count,
 			JobTypeName: jobTypeName,
 		})
@@ -132,6 +155,7 @@ func (h *DashboardHandler) TopJobs(c *gin.Context) {
 
 // TopFeeders - GET /v1/dashboard/top-feeders
 func (h *DashboardHandler) TopFeeders(c *gin.Context) {
+	ctx := c.Request.Context()
 	year := c.Query("year")
 	month := c.Query("month")
 	teamID := c.Query("teamId")
@@ -142,37 +166,53 @@ func (h *DashboardHandler) TopFeeders(c *gin.Context) {
 		limit = 10
 	}
 
-	// Build query
+	// Aggregate query
 	type FeederCount struct {
 		FeederID int64
 		Count    int64
 	}
 	var results []FeederCount
 
-	query := h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.FeederID + " as FeederID, count(*) as count").
-		Scopes(models.TaskFeederNotNull).
-		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID))
-
-	query.Group(models.TaskCol.FeederID).
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+		Scopes(models.TaskNotDeleted, models.TaskFeederNotNull).
+		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID)).
+		Group(models.TaskCol.FeederID).
 		Order("count DESC").
 		Limit(limit).
 		Find(&results)
 
-	// Get feeder details with stations
-	var response []dto.TopFeederResponse
+	if len(results) == 0 {
+		c.JSON(http.StatusOK, dto.StandardResponse{Success: true, Data: []dto.TopFeederResponse{}})
+		return
+	}
+
+	// Batch load feeders (eliminates N+1)
+	ids := make([]int64, len(results))
+	for i, r := range results {
+		ids[i] = r.FeederID
+	}
+	var feeders []models.Feeder
+	h.db.WithContext(ctx).Preload("Station").Where("id IN ?", ids).Find(&feeders)
+
+	feederMap := make(map[int64]*models.Feeder, len(feeders))
+	for i := range feeders {
+		feederMap[feeders[i].ID] = &feeders[i]
+	}
+
+	response := make([]dto.TopFeederResponse, 0, len(results))
 	for _, r := range results {
-		var feeder models.Feeder
-		h.db.WithContext(c.Request.Context()).Preload("Station").First(&feeder, r.FeederID)
-
-		stationName := ""
-		if feeder.Station != nil {
-			stationName = feeder.Station.Name
+		f := feederMap[r.FeederID]
+		if f == nil {
+			continue
 		}
-
+		stationName := ""
+		if f.Station != nil {
+			stationName = f.Station.Name
+		}
 		response = append(response, dto.TopFeederResponse{
-			ID:          feeder.ID,
-			Code:        feeder.Code,
+			ID:          f.ID,
+			Code:        f.Code,
 			StationName: stationName,
 			Count:       r.Count,
 		})
@@ -186,6 +226,7 @@ func (h *DashboardHandler) TopFeeders(c *gin.Context) {
 
 // FeederMatrix - GET /v1/dashboard/feeder-matrix
 func (h *DashboardHandler) FeederMatrix(c *gin.Context) {
+	ctx := c.Request.Context()
 	feederIDStr := c.Query("feederId")
 	if feederIDStr == "" {
 		c.JSON(http.StatusBadRequest, dto.StandardResponse{
@@ -215,7 +256,7 @@ func (h *DashboardHandler) FeederMatrix(c *gin.Context) {
 
 	// Get feeder info
 	var feeder models.Feeder
-	if err := h.db.WithContext(c.Request.Context()).Preload("Station").First(&feeder, feederID).Error; err != nil {
+	if err := h.db.WithContext(ctx).Preload("Station").First(&feeder, feederID).Error; err != nil {
 		c.JSON(http.StatusNotFound, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -226,41 +267,55 @@ func (h *DashboardHandler) FeederMatrix(c *gin.Context) {
 		return
 	}
 
-	// Build query for job details breakdown
+	// Aggregate query for job details breakdown
 	type JobDetailCount struct {
 		JobDetailID int64
 		Count       int64
 	}
 	var results []JobDetailCount
 
-	query := h.db.Model(&models.TaskDaily{}).
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
 		Select(models.TaskCol.JobDetailID+" as JobDetailID, count(*) as count").
 		Where(models.TaskCol.FeederID+" = ?", feederID).
-		Scopes(models.TaskByYear(year), models.TaskByMonth(month))
-
-	query.Group(models.TaskCol.JobDetailID).
+		Scopes(models.TaskNotDeleted, models.TaskByYear(year), models.TaskByMonth(month)).
+		Group(models.TaskCol.JobDetailID).
 		Order("count DESC").
 		Find(&results)
 
-	// Build job details response
+	// Batch load job details (eliminates N+1)
 	var jobDetails []dto.JobDetailInMatrix
 	var totalCount int64
-	for _, r := range results {
-		var jobDetail models.JobDetail
-		h.db.WithContext(c.Request.Context()).Preload("JobType").First(&jobDetail, r.JobDetailID)
 
-		jobTypeName := ""
-		if jobDetail.JobType != nil {
-			jobTypeName = jobDetail.JobType.Name
+	if len(results) > 0 {
+		ids := make([]int64, len(results))
+		for i, r := range results {
+			ids[i] = r.JobDetailID
+		}
+		var jds []models.JobDetail
+		h.db.WithContext(ctx).Preload("JobType").Where("id IN ?", ids).Find(&jds)
+
+		jdMap := make(map[int64]*models.JobDetail, len(jds))
+		for i := range jds {
+			jdMap[jds[i].ID] = &jds[i]
 		}
 
-		jobDetails = append(jobDetails, dto.JobDetailInMatrix{
-			ID:          jobDetail.ID,
-			Name:        jobDetail.Name,
-			Count:       r.Count,
-			JobTypeName: jobTypeName,
-		})
-		totalCount += r.Count
+		for _, r := range results {
+			jd := jdMap[r.JobDetailID]
+			if jd == nil {
+				continue
+			}
+			jobTypeName := ""
+			if jd.JobType != nil {
+				jobTypeName = jd.JobType.Name
+			}
+			jobDetails = append(jobDetails, dto.JobDetailInMatrix{
+				ID:          jd.ID,
+				Name:        jd.Name,
+				Count:       r.Count,
+				JobTypeName: jobTypeName,
+			})
+			totalCount += r.Count
+		}
 	}
 
 	stationName := ""
@@ -282,26 +337,30 @@ func (h *DashboardHandler) FeederMatrix(c *gin.Context) {
 
 // Stats - GET /v1/dashboard/stats
 func (h *DashboardHandler) Stats(c *gin.Context) {
+	ctx := c.Request.Context()
 	startDate := c.Query("startDate")
 	endDate := c.Query("endDate")
 	teamID := c.Query("teamId")
 	feederID := c.Query("feederId")
 
-	// Build base query
-	query := h.db.Model(&models.TaskDaily{}).
-		Scopes(models.TaskByDateRange(startDate, endDate)).
-		Scopes(models.TaskByTeam(teamID)).
-		Scopes(models.TaskByFeeder(feederID))
+	// Build base query with soft delete filter
+	baseScope := func(db *gorm.DB) *gorm.DB {
+		return db.Scopes(models.TaskNotDeleted).
+			Scopes(models.TaskByDateRange(startDate, endDate)).
+			Scopes(models.TaskByTeam(teamID)).
+			Scopes(models.TaskByFeeder(feederID))
+	}
 
 	// Total tasks
 	var totalTasks int64
-	query.Count(&totalTasks)
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).Scopes(baseScope).Count(&totalTasks)
 
-	// Active teams
+	// Active teams (distinct count)
 	var activeTeams int64
-	h.db.Model(&models.TaskDaily{}).
-		Select("DISTINCT " + models.TaskCol.TeamID).
-		Count(&activeTeams)
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Scopes(models.TaskNotDeleted).
+		Select("COUNT(DISTINCT " + models.TaskCol.TeamID + ")").
+		Scan(&activeTeams)
 
 	// Top job type
 	type JobTypeCount struct {
@@ -309,8 +368,9 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count     int64
 	}
 	var topJobTypeResult JobTypeCount
-	h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Select(models.TaskCol.JobTypeID+" as JobTypeID, count(*) as count").
+		Scopes(models.TaskNotDeleted).
 		Group(models.TaskCol.JobTypeID).
 		Order("count DESC").
 		Limit(1).
@@ -319,7 +379,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	topJobType := ""
 	if topJobTypeResult.JobTypeID != 0 {
 		var jobType models.JobType
-		h.db.WithContext(c.Request.Context()).First(&jobType, topJobTypeResult.JobTypeID)
+		h.db.WithContext(ctx).First(&jobType, topJobTypeResult.JobTypeID)
 		topJobType = jobType.Name
 	}
 
@@ -329,9 +389,9 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count    int64
 	}
 	var topFeederResult FeederCount
-	h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.FeederID + " as FeederID, count(*) as count").
-		Scopes(models.TaskFeederNotNull).
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+		Scopes(models.TaskNotDeleted, models.TaskFeederNotNull).
 		Group(models.TaskCol.FeederID).
 		Order("count DESC").
 		Limit(1).
@@ -340,95 +400,125 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	topFeeder := ""
 	if topFeederResult.FeederID != 0 {
 		var feeder models.Feeder
-		h.db.WithContext(c.Request.Context()).First(&feeder, topFeederResult.FeederID)
+		h.db.WithContext(ctx).First(&feeder, topFeederResult.FeederID)
 		topFeeder = feeder.Code
 	}
 
-	// Charts data
+	// === Charts data (batch loaded to avoid N+1) ===
 
-	// Tasks by feeder
-	type ChartData struct {
-		Name  string
-		Value int64
-	}
-	var tasksByFeeder []dto.ChartItem
-	var feederResults []struct {
+	// Tasks by feeder — aggregate then batch load names
+	var feederAgg []struct {
 		FeederID int64
 		Count    int64
 	}
-	h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.FeederID + " as FeederID, count(*) as count").
-		Scopes(models.TaskFeederNotNull).
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+		Scopes(models.TaskNotDeleted, models.TaskFeederNotNull).
 		Group(models.TaskCol.FeederID).
 		Order("count DESC").
 		Limit(10).
-		Find(&feederResults)
+		Find(&feederAgg)
 
-	for _, r := range feederResults {
-		var feeder models.Feeder
-		h.db.WithContext(c.Request.Context()).First(&feeder, r.FeederID)
-		tasksByFeeder = append(tasksByFeeder, dto.ChartItem{
-			Name:  feeder.Code,
-			Value: r.Count,
-		})
+	var tasksByFeeder []dto.ChartItem
+	if len(feederAgg) > 0 {
+		feederIDs := make([]int64, len(feederAgg))
+		for i, r := range feederAgg {
+			feederIDs[i] = r.FeederID
+		}
+		var feeders []models.Feeder
+		h.db.WithContext(ctx).Where("id IN ?", feederIDs).Find(&feeders)
+
+		fMap := make(map[int64]string, len(feeders))
+		for _, f := range feeders {
+			fMap[f.ID] = f.Code
+		}
+		for _, r := range feederAgg {
+			tasksByFeeder = append(tasksByFeeder, dto.ChartItem{
+				Name:  fMap[r.FeederID],
+				Value: r.Count,
+			})
+		}
 	}
 
-	// Tasks by job type
-	var tasksByJobType []dto.ChartItem
-	var jobTypeResults []struct {
+	// Tasks by job type — aggregate then batch load names
+	var jtAgg []struct {
 		JobTypeID int64
 		Count     int64
 	}
-	h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Select(models.TaskCol.JobTypeID+" as JobTypeID, count(*) as count").
+		Scopes(models.TaskNotDeleted).
 		Group(models.TaskCol.JobTypeID).
 		Order("count DESC").
-		Find(&jobTypeResults)
+		Find(&jtAgg)
 
-	for _, r := range jobTypeResults {
-		var jobType models.JobType
-		h.db.WithContext(c.Request.Context()).First(&jobType, r.JobTypeID)
-		tasksByJobType = append(tasksByJobType, dto.ChartItem{
-			Name:  jobType.Name,
-			Value: r.Count,
-		})
+	var tasksByJobType []dto.ChartItem
+	if len(jtAgg) > 0 {
+		jtIDs := make([]int64, len(jtAgg))
+		for i, r := range jtAgg {
+			jtIDs[i] = r.JobTypeID
+		}
+		var jobTypes []models.JobType
+		h.db.WithContext(ctx).Where("id IN ?", jtIDs).Find(&jobTypes)
+
+		jtMap := make(map[int64]string, len(jobTypes))
+		for _, jt := range jobTypes {
+			jtMap[jt.ID] = jt.Name
+		}
+		for _, r := range jtAgg {
+			tasksByJobType = append(tasksByJobType, dto.ChartItem{
+				Name:  jtMap[r.JobTypeID],
+				Value: r.Count,
+			})
+		}
 	}
 
-	// Tasks by team
-	var tasksByTeam []dto.ChartItem
-	var teamResults []struct {
+	// Tasks by team — aggregate then batch load names
+	var teamAgg []struct {
 		TeamID int64
 		Count  int64
 	}
-	h.db.Model(&models.TaskDaily{}).
-		Select(models.TaskCol.TeamID + " as TeamID, count(*) as count").
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Select(models.TaskCol.TeamID+" as TeamID, count(*) as count").
+		Scopes(models.TaskNotDeleted).
 		Group(models.TaskCol.TeamID).
 		Order("count DESC").
-		Find(&teamResults)
+		Find(&teamAgg)
 
-	for _, r := range teamResults {
-		var team models.Team
-		h.db.WithContext(c.Request.Context()).First(&team, r.TeamID)
-		tasksByTeam = append(tasksByTeam, dto.ChartItem{
-			Name:  team.Name,
-			Value: r.Count,
-		})
+	var tasksByTeam []dto.ChartItem
+	if len(teamAgg) > 0 {
+		teamIDs := make([]int64, len(teamAgg))
+		for i, r := range teamAgg {
+			teamIDs[i] = r.TeamID
+		}
+		var teams []models.Team
+		h.db.WithContext(ctx).Where("id IN ?", teamIDs).Find(&teams)
+
+		tMap := make(map[int64]string, len(teams))
+		for _, t := range teams {
+			tMap[t.ID] = t.Name
+		}
+		for _, r := range teamAgg {
+			tasksByTeam = append(tasksByTeam, dto.ChartItem{
+				Name:  tMap[r.TeamID],
+				Value: r.Count,
+			})
+		}
 	}
 
-	// Tasks by date
-	var tasksByDate []dto.DateChartItem
+	// Tasks by date — no N+1 issue (pure aggregate)
 	var dateResults []struct {
 		Date  string
 		Count int64
 	}
-	dateQuery := h.db.Model(&models.TaskDaily{}).
-		Select("TO_CHAR(" + models.TaskCol.WorkDate + ", 'YYYY-MM-DD') as date, count(*) as count").
-		Scopes(models.TaskByDateRange(startDate, endDate))
-
-	dateQuery.Group("date").
+	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Select("TO_CHAR("+models.TaskCol.WorkDate+", 'YYYY-MM-DD') as date, count(*) as count").
+		Scopes(models.TaskNotDeleted, models.TaskByDateRange(startDate, endDate)).
+		Group("date").
 		Order("date ASC").
 		Find(&dateResults)
 
+	tasksByDate := make([]dto.DateChartItem, 0, len(dateResults))
 	for _, r := range dateResults {
 		tasksByDate = append(tasksByDate, dto.DateChartItem{
 			Date:  r.Date,
@@ -453,4 +543,6 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 			},
 		},
 	})
+
+	log.Printf("Dashboard stats loaded: %d tasks", totalTasks)
 }

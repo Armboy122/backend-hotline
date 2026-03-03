@@ -65,9 +65,9 @@ func Connect(ctx context.Context, cfg *config.Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to get underlying database connection: %w", err)
 	}
 	sqlDB.SetMaxOpenConns(10)
-	sqlDB.SetMaxIdleConns(5)
-	sqlDB.SetConnMaxLifetime(30 * time.Minute)
-	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+	sqlDB.SetMaxIdleConns(2)                  // Neon suspends idle compute → keep few idle conns
+	sqlDB.SetConnMaxLifetime(5 * time.Minute) // Avoid stale conns after Neon wake
+	sqlDB.SetConnMaxIdleTime(1 * time.Minute) // Release idle conns quickly for Cloud Run
 
 	return db, nil
 }

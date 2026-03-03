@@ -127,10 +127,10 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 		tasksV1 := apiV1.Group("/tasks")
 		{
 			handler := v1.NewTaskHandler(db)
-			tasksV1.GET("", middleware.CachePublic(60), handler.List)           // cache 1 min (paginated, dynamic filters)
-			tasksV1.GET("/by-team", middleware.CachePublic(120), handler.ListByTeam)   // cache 2 min
+			tasksV1.GET("", middleware.CachePublic(60), handler.List)                    // cache 1 min (paginated, dynamic filters)
+			tasksV1.GET("/by-team", middleware.CachePublic(120), handler.ListByTeam)     // cache 2 min
 			tasksV1.GET("/by-filter", middleware.CachePublic(180), handler.ListByFilter) // cache 3 min (per year/month combo)
-			tasksV1.GET("/:id", middleware.CachePublic(60), handler.GetByID)    // cache 1 min
+			tasksV1.GET("/:id", middleware.CachePublic(60), handler.GetByID)             // cache 1 min
 			tasksV1.POST("", handler.Create)
 			tasksV1.PUT("/:id", handler.Update)
 			tasksV1.DELETE("/:id", handler.Delete)
@@ -188,7 +188,22 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 
 func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		allowedOrigin := "*" // fallback for dev
+
+		if len(cfg.CORS.AllowedOrigins) > 0 {
+			allowedOrigin = "" // deny by default if origins are configured
+			for _, o := range cfg.CORS.AllowedOrigins {
+				if o == origin || o == "*" {
+					allowedOrigin = origin
+					break
+				}
+			}
+		}
+
+		if allowedOrigin != "" {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")

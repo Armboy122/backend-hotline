@@ -100,6 +100,8 @@ func convertTaskToResponse(task *models.TaskDaily) dto.TaskResponse {
 
 // List - GET /v1/tasks
 func (h *TaskHandler) List(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	// Parse query parameters
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
@@ -111,8 +113,9 @@ func (h *TaskHandler) List(c *gin.Context) {
 	}
 	offset := (page - 1) * limit
 
-	// Build query
-	query := h.db.Model(&models.TaskDaily{})
+	// Build query with soft delete filter
+	query := h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Scopes(models.TaskNotDeleted)
 
 	// Apply filters
 	if workDate := c.Query("workDate"); workDate != "" {
@@ -159,7 +162,7 @@ func (h *TaskHandler) List(c *gin.Context) {
 	}
 
 	// Convert to response
-	var response []dto.TaskResponse
+	response := make([]dto.TaskResponse, 0, len(tasks))
 	for _, task := range tasks {
 		response = append(response, convertTaskToResponse(&task))
 	}
@@ -177,6 +180,7 @@ func (h *TaskHandler) List(c *gin.Context) {
 
 // GetByID - GET /v1/tasks/:id
 func (h *TaskHandler) GetByID(c *gin.Context) {
+	ctx := c.Request.Context()
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, dto.StandardResponse{
@@ -190,7 +194,8 @@ func (h *TaskHandler) GetByID(c *gin.Context) {
 	}
 
 	var task models.TaskDaily
-	if err := h.db.
+	if err := h.db.WithContext(ctx).
+		Scopes(models.TaskNotDeleted).
 		Preload("Team").
 		Preload("JobType").
 		Preload("JobDetail").
@@ -304,7 +309,7 @@ func (h *TaskHandler) Update(c *gin.Context) {
 	}
 
 	var task models.TaskDaily
-	if err := h.db.WithContext(c.Request.Context()).First(&task, id).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Scopes(models.TaskNotDeleted).First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -419,7 +424,7 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 	}
 
 	var task models.TaskDaily
-	if err := h.db.WithContext(c.Request.Context()).First(&task, id).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Scopes(models.TaskNotDeleted).First(&task, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -450,6 +455,7 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 
 // ListByFilter - GET /v1/tasks/by-filter
 func (h *TaskHandler) ListByFilter(c *gin.Context) {
+	ctx := c.Request.Context()
 	year := c.Query("year")
 	month := c.Query("month")
 
@@ -464,8 +470,9 @@ func (h *TaskHandler) ListByFilter(c *gin.Context) {
 		return
 	}
 
-	// Build query
-	query := h.db.Model(&models.TaskDaily{}).
+	// Build query with soft delete filter
+	query := h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Scopes(models.TaskNotDeleted).
 		Where("EXTRACT(YEAR FROM WorkDate) = ?", year).
 		Where("EXTRACT(MONTH FROM WorkDate) = ?", month)
 
@@ -527,14 +534,37 @@ func (h *TaskHandler) ListByFilter(c *gin.Context) {
 
 // ListByTeam - GET /v1/tasks/by-team
 func (h *TaskHandler) ListByTeam(c *gin.Context) {
-	// Get tasks
+	ctx := c.Request.Context()
+
+	// Parse pagination
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 500 {
+		limit = 100
+	}
+	offset := (page - 1) * limit
+
+	// Build query with soft delete filter and pagination
+	query := h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+		Scopes(models.TaskNotDeleted)
+
+	// Get total count
+	var total int64
+	query.Count(&total)
+
+	// Get tasks with pagination
 	var tasks []models.TaskDaily
-	if err := h.db.
+	if err := query.
 		Preload("Team").
 		Preload("JobType").
 		Preload("JobDetail").
 		Preload("Feeder.Station.OperationCenter").
 		Order("WorkDate DESC, CreatedAt DESC").
+		Offset(offset).
+		Limit(limit).
 		Find(&tasks).Error; err != nil {
 		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
@@ -575,5 +605,10 @@ func (h *TaskHandler) ListByTeam(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.StandardResponse{
 		Success: true,
 		Data:    teamMap,
+		Meta: &dto.Meta{
+			Page:  page,
+			Limit: limit,
+			Total: total,
+		},
 	})
 }

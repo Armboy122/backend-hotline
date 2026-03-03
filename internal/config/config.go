@@ -3,8 +3,11 @@ package config
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/viper"
+	"github.com/subosito/gotenv"
 )
 
 type Config struct {
@@ -57,6 +60,7 @@ type CORSConfig struct {
 
 // LoadConfig reads the application configuration from config.yaml file.
 // It searches for the config file in the current directory and parent directories.
+// Values in config.yaml can reference environment variables using ${VAR_NAME} syntax.
 // Returns a Config struct populated with values from the YAML file, or an error if loading fails.
 func LoadConfig(ctx context.Context) (*Config, error) {
 	viper.SetConfigName("config")
@@ -64,6 +68,12 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 	viper.AddConfigPath(".")
 	viper.AddConfigPath("./")
 	viper.AddConfigPath("../")
+
+	// โหลด .env ถ้ามี (ไม่ error ถ้าไม่มีไฟล์)
+	if f, err := os.Open(".env"); err == nil {
+		_ = gotenv.Apply(f)
+		f.Close()
+	}
 
 	// อ่าน config file
 	if err := viper.ReadInConfig(); err != nil {
@@ -75,5 +85,34 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	// Expand ${VAR} placeholders จาก environment variables
+	config.Server.Mode = expandEnv(config.Server.Mode)
+	if config.Server.Mode == "" {
+		config.Server.Mode = "debug"
+	}
+	config.Database.Password = expandEnv(config.Database.Password)
+	config.Cloudflare.R2.AccountID = expandEnv(config.Cloudflare.R2.AccountID)
+	config.Cloudflare.R2.AccessKeyID = expandEnv(config.Cloudflare.R2.AccessKeyID)
+	config.Cloudflare.R2.SecretAccessKey = expandEnv(config.Cloudflare.R2.SecretAccessKey)
+	config.JWT.Secret = expandEnv(config.JWT.Secret)
+
+	// Expand CORS origins และกรอง empty string ออก
+	expanded := make([]string, 0, len(config.CORS.AllowedOrigins))
+	for _, origin := range config.CORS.AllowedOrigins {
+		if v := expandEnv(origin); v != "" {
+			expanded = append(expanded, v)
+		}
+	}
+	config.CORS.AllowedOrigins = expanded
+
 	return &config, nil
+}
+
+// expandEnv แทนที่ ${VAR_NAME} ด้วยค่าจาก environment variable
+func expandEnv(s string) string {
+	if strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}") {
+		key := s[2 : len(s)-1]
+		return os.Getenv(key)
+	}
+	return s
 }

@@ -1,12 +1,12 @@
 server:
   port: 8080
-  mode: debug # debug, release
+  mode: ${MODE} # debug, release
 
 database:
   host: ep-sweet-hill-a1a76thg.ap-southeast-1.aws.neon.tech
   port: 5432
   user: neondb_owner
-  password: npg_lUdMJbNRt4Q0
+  password: ${DB_PASSWORD}
   dbname: neondb
   sslmode: require
   timezone: Asia/Bangkok
@@ -14,14 +14,14 @@ database:
 
 cloudflare:
   r2:
-    account_id: 8605ba5178c4d6a945aec62c38a12241
-    access_key_id: 1bb8df36212e7e521eff2b1a304061e0
-    secret_access_key: 8225422f0850984838ed597ba493b88fc9b13a0c8786f2026576bf68ee4df3ff
+    account_id: ${CF_ACCOUNT_ID}
+    access_key_id: ${CF_ACCESS_KEY_ID}
+    secret_access_key: ${CF_SECRET_ACCESS_KEY}
     bucket_name: storagehotline
     public_url: https://photo.akin.love
 
 jwt:
-  secret: my-super-secret-jwt-key-for-local-dev
+  secret: ${JWT_SECRET}
   access_token_expiry: 1h
   refresh_token_expiry: 168h # 7 days
 
