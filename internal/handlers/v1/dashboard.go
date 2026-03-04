@@ -276,18 +276,14 @@ func (h *DashboardHandler) FeederMatrix(c *gin.Context) {
 	year := c.Query("year")
 	month := c.Query("month")
 
+	// Concurrent queries using errgroup
+	g, ctx := errgroup.WithContext(ctx)
+
 	// Get feeder info
 	var feeder models.Feeder
-	if err := h.db.WithContext(ctx).Preload("Station").First(&feeder, feederID).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.StandardResponse{
-			Success: false,
-			Error: &dto.ErrorInfo{
-				Code:    "NOT_FOUND",
-				Message: "Feeder not found",
-			},
-		})
-		return
-	}
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Preload("Station").First(&feeder, feederID).Error
+	})
 
 	// Aggregate query for job details breakdown
 	type JobDetailCount struct {
@@ -296,13 +292,36 @@ func (h *DashboardHandler) FeederMatrix(c *gin.Context) {
 	}
 	var results []JobDetailCount
 
-	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobDetailID+" as JobDetailID, count(*) as count").
-		Where(models.TaskCol.FeederID+" = ?", feederID).
-		Scopes(models.TaskNotDeleted, models.TaskByYear(year), models.TaskByMonth(month)).
-		Group(models.TaskCol.JobDetailID).
-		Order("count DESC").
-		Find(&results)
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+			Select(models.TaskCol.JobDetailID+" as JobDetailID, count(*) as count").
+			Where(models.TaskCol.FeederID+" = ?", feederID).
+			Scopes(models.TaskNotDeleted, models.TaskByYear(year), models.TaskByMonth(month)).
+			Group(models.TaskCol.JobDetailID).
+			Order("count DESC").
+			Find(&results).Error
+	})
+
+	if err := g.Wait(); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dto.StandardResponse{
+				Success: false,
+				Error: &dto.ErrorInfo{
+					Code:    "NOT_FOUND",
+					Message: "Feeder not found",
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
+			Success: false,
+			Error: &dto.ErrorInfo{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to load feeder matrix",
+			},
+		})
+		return
+	}
 
 	// Batch load job details (eliminates N+1)
 	var jobDetails []dto.JobDetailInMatrix
