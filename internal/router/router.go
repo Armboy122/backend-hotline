@@ -6,6 +6,7 @@ import (
 	"backend-hotlines3/internal/middleware"
 	"backend-hotlines3/pkg/jwt"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -16,6 +17,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 
 	// Global Recovery Middleware (must be first to catch panics in all routes)
 	r.Use(middleware.RecoveryMiddleware())
+
+	// Request Timeout Middleware (30 seconds)
+	r.Use(middleware.TimeoutMiddleware(30 * time.Second))
 
 	// CORS middleware
 	r.Use(CORSMiddleware(cfg))
