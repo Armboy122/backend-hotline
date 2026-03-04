@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -34,10 +35,12 @@ func main() {
 	gin.SetMode(cfg.Server.Mode)
 
 	// เชื่อมต่อ database
+	log.Println("Connecting to database...")
 	db, err := database.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect database: %v", err)
 	}
+	log.Println("Database connected")
 
 	// Auto migrate models (เฉพาะเมื่อ auto_migrate: true ใน config)
 	if cfg.Database.AutoMigrate {
@@ -66,8 +69,16 @@ func main() {
 	// Global Recovery Middleware (Handle Panics)
 	r.Use(middleware.RecoveryMiddleware())
 
+	// Cloud Run injects PORT env var — honour it; fall back to config
+	port := cfg.Server.Port
+	if portEnv := os.Getenv("PORT"); portEnv != "" {
+		if p, err := strconv.Atoi(portEnv); err == nil {
+			port = p
+		}
+	}
+
 	// สร้าง HTTP server
-	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	addr := fmt.Sprintf(":%d", port)
 	srv := &http.Server{
 		Addr:    addr,
 		Handler: r,
