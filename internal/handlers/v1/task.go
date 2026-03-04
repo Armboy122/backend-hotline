@@ -281,12 +281,14 @@ func (h *TaskHandler) Create(c *gin.Context) {
 	}
 
 	// Reload with relations
-	h.db.
+	if err := h.db.WithContext(c.Request.Context()).
 		Preload("Team").
 		Preload("JobType").
 		Preload("JobDetail").
 		Preload("Feeder.Station.OperationCenter").
-		First(&task, task.ID)
+		First(&task, task.ID).Error; err != nil {
+		log.Printf("Database error: %v", err)
+	}
 
 	c.JSON(http.StatusCreated, dto.StandardResponse{
 		Success: true,
@@ -396,12 +398,14 @@ func (h *TaskHandler) Update(c *gin.Context) {
 	}
 
 	// Reload with relations
-	h.db.
+	if err := h.db.WithContext(c.Request.Context()).
 		Preload("Team").
 		Preload("JobType").
 		Preload("JobDetail").
 		Preload("Feeder.Station.OperationCenter").
-		First(&task, task.ID)
+		First(&task, task.ID).Error; err != nil {
+		log.Printf("Database error: %v", err)
+	}
 
 	c.JSON(http.StatusOK, dto.StandardResponse{
 		Success: true,
