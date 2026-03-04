@@ -324,7 +324,7 @@ func (h *DashboardHandler) FeederMatrix(c *gin.Context) {
 	}
 
 	// Batch load job details (eliminates N+1)
-	var jobDetails []dto.JobDetailInMatrix
+	jobDetails := []dto.JobDetailInMatrix{}
 	var totalCount int64
 
 	if len(results) > 0 {
@@ -533,7 +533,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	}
 
 	// Build tasks by feeder response
-	var tasksByFeeder []dto.ChartItem
+	tasksByFeeder := []dto.ChartItem{}
 	if len(feederAgg) > 0 {
 		feederIDs := make([]int64, len(feederAgg))
 		for i, r := range feederAgg {
@@ -555,7 +555,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	}
 
 	// Build tasks by job type response
-	var tasksByJobType []dto.ChartItem
+	tasksByJobType := []dto.ChartItem{}
 	if len(jtAgg) > 0 {
 		jtIDs := make([]int64, len(jtAgg))
 		for i, r := range jtAgg {
@@ -577,7 +577,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	}
 
 	// Build tasks by team response
-	var tasksByTeam []dto.ChartItem
+	tasksByTeam := []dto.ChartItem{}
 	if len(teamAgg) > 0 {
 		teamIDs := make([]int64, len(teamAgg))
 		for i, r := range teamAgg {

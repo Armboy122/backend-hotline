@@ -43,7 +43,7 @@ func (h *TeamHandler) List(c *gin.Context) {
 	countMap := models.CountTasksBy(h.db, models.TaskCol.TeamID, teamIDs)
 
 	// Build response
-	var response []dto.TeamResponse
+	response := []dto.TeamResponse{}
 	for _, t := range teams {
 		response = append(response, dto.TeamResponse{
 			ID:   t.ID,

@@ -60,7 +60,7 @@ func (h *FeederHandler) List(c *gin.Context) {
 	countMap := models.CountTasksBy(h.db, models.TaskCol.FeederID, feederIDs)
 
 	// Build response
-	var response []dto.FeederResponse
+	response := []dto.FeederResponse{}
 	for _, f := range rows {
 		feederResp := dto.FeederResponse{
 			ID:        f.ID,

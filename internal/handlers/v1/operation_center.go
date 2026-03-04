@@ -34,7 +34,7 @@ func (h *OperationCenterHandler) List(c *gin.Context) {
 		return
 	}
 
-	var response []dto.OperationCenterResponse
+	response := []dto.OperationCenterResponse{}
 	for _, oc := range operationCenters {
 		response = append(response, dto.OperationCenterResponse{
 			ID:   oc.ID,

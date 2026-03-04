@@ -45,7 +45,7 @@ func (h *JobDetailHandler) List(c *gin.Context) {
 	countMap := models.CountTasksBy(h.db, models.TaskCol.JobDetailID, jobDetailIDs)
 
 	// Build response
-	var response []dto.JobDetailResponse
+	response := []dto.JobDetailResponse{}
 	for _, jd := range jobDetails {
 		var deletedAt *string
 		if jd.DeletedAt != nil {

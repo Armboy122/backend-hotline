@@ -34,7 +34,7 @@ func (h *PEAHandler) List(c *gin.Context) {
 		return
 	}
 
-	var response []dto.PEAResponse
+	response := []dto.PEAResponse{}
 	for _, p := range peas {
 		peaResp := dto.PEAResponse{
 			ID:          p.ID,
@@ -227,7 +227,7 @@ func (h *PEAHandler) BulkCreate(c *gin.Context) {
 	}
 	h.db.WithContext(c.Request.Context()).Preload("OperationCenter").Where("id IN ?", peaIDs).Find(&peas)
 
-	var response []dto.PEAResponse
+	response := []dto.PEAResponse{}
 	for _, p := range peas {
 		peaResp := dto.PEAResponse{
 			ID:          p.ID,

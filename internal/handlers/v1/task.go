@@ -530,7 +530,7 @@ func (h *TaskHandler) ListByFilter(c *gin.Context) {
 	}
 
 	// Convert map to ordered slice (preserve order of first appearance)
-	var response []dto.TasksByTeamResponse
+	response := []dto.TasksByTeamResponse{}
 	seen := make(map[string]bool)
 	for _, task := range tasks {
 		teamName := "Unknown"
@@ -638,7 +638,7 @@ func (h *TaskHandler) ListByTeam(c *gin.Context) {
 	}
 
 	// Convert map to ordered slice (preserve order of first appearance)
-	var response []dto.TasksByTeamResponse
+	response := []dto.TasksByTeamResponse{}
 	seen := make(map[string]bool)
 	for _, task := range tasks {
 		teamName := "Unknown"

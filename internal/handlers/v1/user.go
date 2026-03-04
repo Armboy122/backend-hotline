@@ -57,7 +57,7 @@ func (h *UserHandler) List(c *gin.Context) {
 		return
 	}
 
-	var response []dto.UserResponse
+	response := []dto.UserResponse{}
 	for _, user := range users {
 		lastLoginStr := ""
 		if user.LastLogin != nil {

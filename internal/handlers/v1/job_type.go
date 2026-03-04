@@ -43,7 +43,7 @@ func (h *JobTypeHandler) List(c *gin.Context) {
 	countMap := models.CountTasksBy(h.db, models.TaskCol.JobTypeID, jobTypeIDs)
 
 	// Build response
-	var response []dto.JobTypeResponse
+	response := []dto.JobTypeResponse{}
 	for _, jt := range jobTypes {
 		response = append(response, dto.JobTypeResponse{
 			ID:   jt.ID,

@@ -34,7 +34,7 @@ func (h *StationHandler) List(c *gin.Context) {
 		return
 	}
 
-	var response []dto.StationResponse
+	response := []dto.StationResponse{}
 	for _, s := range stations {
 		stationResp := dto.StationResponse{
 			ID:          s.ID,
