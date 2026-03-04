@@ -295,18 +295,6 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.WithContext(c.Request.Context()).Preload("Team").First(&user, user.ID).Error; err != nil {
-		log.Printf("Database error: %v", err)
-		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
-			Success: false,
-			Error: &dto.ErrorInfo{
-				Code:    "INTERNAL_ERROR",
-				Message: err.Error(),
-			},
-		})
-		return
-	}
-
 	lastLoginStr := ""
 	if user.LastLogin != nil {
 		lastLoginStr = user.LastLogin.Format(time.RFC3339)
