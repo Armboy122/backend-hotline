@@ -8,6 +8,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -20,6 +21,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 
 	// Request Timeout Middleware (30 seconds)
 	r.Use(middleware.TimeoutMiddleware(30 * time.Second))
+
+	// Gzip Compression Middleware
+	r.Use(gzip.Gzip(gzip.DefaultCompression))
 
 	// CORS middleware
 	r.Use(CORSMiddleware(cfg))
