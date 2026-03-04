@@ -22,6 +22,10 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 	// Request Timeout Middleware (30 seconds)
 	r.Use(middleware.TimeoutMiddleware(30 * time.Second))
 
+	// Rate Limiting Middleware (100 requests per minute per IP)
+	rateLimiter := middleware.NewRateLimiter(100, time.Minute)
+	r.Use(rateLimiter.Middleware())
+
 	// Gzip Compression Middleware
 	r.Use(gzip.Gzip(gzip.DefaultCompression))
 
