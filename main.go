@@ -13,7 +13,6 @@ import (
 
 	"backend-hotlines3/internal/config"
 	"backend-hotlines3/internal/database"
-	"backend-hotlines3/internal/middleware"
 	"backend-hotlines3/internal/router"
 	"backend-hotlines3/pkg/jwt"
 
@@ -65,9 +64,6 @@ func main() {
 
 	// สร้าง router
 	r := router.SetupRouter(cfg, db, jwtManager)
-
-	// Global Recovery Middleware (Handle Panics)
-	r.Use(middleware.RecoveryMiddleware())
 
 	// Cloud Run injects PORT env var — honour it; fall back to config
 	port := cfg.Server.Port

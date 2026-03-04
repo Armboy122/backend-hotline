@@ -14,6 +14,9 @@ import (
 func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *gin.Engine {
 	r := gin.Default()
 
+	// Global Recovery Middleware (must be first to catch panics in all routes)
+	r.Use(middleware.RecoveryMiddleware())
+
 	// CORS middleware
 	r.Use(CORSMiddleware(cfg))
 
