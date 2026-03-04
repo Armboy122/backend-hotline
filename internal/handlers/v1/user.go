@@ -23,8 +23,29 @@ func NewUserHandler(db *gorm.DB) *UserHandler {
 
 // List - GET /v1/users (admin only)
 func (h *UserHandler) List(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Parse pagination
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	offset := (page - 1) * limit
+
+	// Build query
+	query := h.db.WithContext(ctx).Scopes(models.UserNotDeleted).Preload("Team")
+
+	// Get total count
+	var total int64
+	query.Count(&total)
+
+	// Get users with pagination
 	var users []models.User
-	if err := h.db.WithContext(c.Request.Context()).Scopes(models.UserNotDeleted).Preload("Team").Find(&users).Error; err != nil {
+	if err := query.Order("created_at DESC").Offset(offset).Limit(limit).Find(&users).Error; err != nil {
 		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
@@ -57,6 +78,11 @@ func (h *UserHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.StandardResponse{
 		Success: true,
 		Data:    response,
+		Meta: &dto.Meta{
+			Page:  page,
+			Limit: limit,
+			Total: total,
+		},
 	})
 }
 
