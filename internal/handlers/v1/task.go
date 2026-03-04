@@ -529,9 +529,23 @@ func (h *TaskHandler) ListByFilter(c *gin.Context) {
 		teamMap[teamName] = entry
 	}
 
+	// Convert map to ordered slice (preserve order of first appearance)
+	var response []dto.TasksByTeamResponse
+	seen := make(map[string]bool)
+	for _, task := range tasks {
+		teamName := "Unknown"
+		if task.Team != nil {
+			teamName = task.Team.Name
+		}
+		if !seen[teamName] {
+			seen[teamName] = true
+			response = append(response, teamMap[teamName])
+		}
+	}
+
 	c.JSON(http.StatusOK, dto.StandardResponse{
 		Success: true,
-		Data:    teamMap,
+		Data:    response,
 	})
 }
 
@@ -623,9 +637,23 @@ func (h *TaskHandler) ListByTeam(c *gin.Context) {
 		teamMap[teamName] = entry
 	}
 
+	// Convert map to ordered slice (preserve order of first appearance)
+	var response []dto.TasksByTeamResponse
+	seen := make(map[string]bool)
+	for _, task := range tasks {
+		teamName := "Unknown"
+		if task.Team != nil {
+			teamName = task.Team.Name
+		}
+		if !seen[teamName] {
+			seen[teamName] = true
+			response = append(response, teamMap[teamName])
+		}
+	}
+
 	c.JSON(http.StatusOK, dto.StandardResponse{
 		Success: true,
-		Data:    teamMap,
+		Data:    response,
 		Meta: &dto.Meta{
 			Page:  page,
 			Limit: limit,
