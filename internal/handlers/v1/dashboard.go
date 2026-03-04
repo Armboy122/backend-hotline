@@ -418,7 +418,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	g.Go(func() error {
 		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
 			Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
-			Scopes(models.TaskNotDeleted).
+			Scopes(baseScope).
 			Group(models.TaskCol.JobTypeID).
 			Order("count DESC").
 			Limit(1).
@@ -435,7 +435,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	g.Go(func() error {
 		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
 			Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
-			Scopes(models.TaskNotDeleted, models.TaskFeederNotNull).
+			Scopes(baseScope, models.TaskFeederNotNull).
 			Group(models.TaskCol.FeederID).
 			Order("count DESC").
 			Limit(1).
@@ -451,7 +451,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	g.Go(func() error {
 		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
 			Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
-			Scopes(models.TaskNotDeleted, models.TaskFeederNotNull).
+			Scopes(baseScope, models.TaskFeederNotNull).
 			Group(models.TaskCol.FeederID).
 			Order("count DESC").
 			Limit(10).
@@ -467,7 +467,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	g.Go(func() error {
 		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
 			Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
-			Scopes(models.TaskNotDeleted).
+			Scopes(baseScope).
 			Group(models.TaskCol.JobTypeID).
 			Order("count DESC").
 			Find(&jtAgg).Error
@@ -482,7 +482,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	g.Go(func() error {
 		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
 			Select(models.TaskCol.TeamID + " as TeamID, count(*) as count").
-			Scopes(models.TaskNotDeleted).
+			Scopes(baseScope).
 			Group(models.TaskCol.TeamID).
 			Order("count DESC").
 			Find(&teamAgg).Error
