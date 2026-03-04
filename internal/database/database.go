@@ -86,6 +86,10 @@ func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 		&models.Team{},
 		&models.TaskDaily{},
 		&models.User{},
+		&models.MonthlyPlan{},
+		&models.PlanFile{},
+		&models.FileSizeLog{},
+		&models.MonthlyPlanSetting{},
 	); err != nil {
 		return fmt.Errorf("failed to auto-migrate database: %w", err)
 	}

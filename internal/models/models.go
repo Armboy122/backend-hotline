@@ -300,3 +300,81 @@ type User struct {
 func (User) TableName() string {
 	return "User"
 }
+
+// MonthlyPlan - แผนลงทะเบียนงานประจำเดือน
+type MonthlyPlan struct {
+	ID        int64     `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	Year      int       `gorm:"not null;column:year" json:"year"`
+	Month     int       `gorm:"not null;column:month" json:"month"`
+	IsLocked  bool      `gorm:"not null;default:false;column:isLocked" json:"isLocked"`
+	CreatedAt time.Time `gorm:"not null;type:timestamptz(6);column:createdAt;default:CURRENT_TIMESTAMP" json:"createdAt"`
+
+	Files []PlanFile `gorm:"foreignKey:MonthlyPlanID" json:"files,omitempty"`
+}
+
+// TableName กำหนดชื่อตารางใน database
+func (MonthlyPlan) TableName() string {
+	return "MonthlyPlan"
+}
+
+// PlanFile - ไฟล์แผนงานที่อัพโหลดเข้าเดือน
+type PlanFile struct {
+	ID            int64      `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	MonthlyPlanID int64      `gorm:"not null;column:monthlyPlanId;index:PlanFile_monthlyPlanId_idx" json:"monthlyPlanId"`
+	TeamID        *int64     `gorm:"column:teamId;index:PlanFile_teamId_idx" json:"teamId"`
+	UploadedByID  int64      `gorm:"not null;column:uploadedById" json:"uploadedById"`
+	FileKey       string     `gorm:"not null;column:fileKey" json:"fileKey"`
+	FileURL       string     `gorm:"not null;column:fileURL" json:"fileURL"`
+	FileName      string     `gorm:"not null;column:fileName" json:"fileName"`
+	FileSizeBytes int64      `gorm:"not null;default:0;column:fileSizeBytes" json:"fileSizeBytes"`
+	Description   *string    `gorm:"column:description" json:"description,omitempty"`
+	IsMasterPlan  bool       `gorm:"not null;default:false;column:isMasterPlan" json:"isMasterPlan"`
+	IsDeleted     bool       `gorm:"not null;default:false;column:isDeleted" json:"isDeleted"`
+	DeletedAt     *time.Time `gorm:"type:timestamptz(6);column:deletedAt" json:"deletedAt,omitempty"`
+	CreatedAt     time.Time  `gorm:"not null;type:timestamptz(6);column:createdAt;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt     time.Time  `gorm:"not null;type:timestamptz(6);column:updatedAt" json:"updatedAt"`
+
+	MonthlyPlan *MonthlyPlan `gorm:"foreignKey:MonthlyPlanID;references:ID" json:"monthlyPlan,omitempty"`
+	Team        *Team        `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
+	UploadedBy  *User        `gorm:"foreignKey:UploadedByID;references:ID" json:"uploadedBy,omitempty"`
+}
+
+// TableName กำหนดชื่อตารางใน database
+func (PlanFile) TableName() string {
+	return "PlanFile"
+}
+
+// FileSizeLog - log ขนาดไฟล์ทุกครั้งที่อัพโหลด (F-13)
+type FileSizeLog struct {
+	ID            int64     `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	PlanFileID    int64     `gorm:"not null;column:planFileId;index:FileSizeLog_planFileId_idx" json:"planFileId"`
+	UploadedByID  int64     `gorm:"not null;column:uploadedById" json:"uploadedById"`
+	FileSizeBytes int64     `gorm:"not null;column:fileSizeBytes" json:"fileSizeBytes"`
+	CreatedAt     time.Time `gorm:"not null;type:timestamptz(6);column:createdAt;default:CURRENT_TIMESTAMP" json:"createdAt"`
+
+	PlanFile   *PlanFile `gorm:"foreignKey:PlanFileID;references:ID" json:"planFile,omitempty"`
+	UploadedBy *User     `gorm:"foreignKey:UploadedByID;references:ID" json:"uploadedBy,omitempty"`
+}
+
+// TableName กำหนดชื่อตารางใน database
+func (FileSizeLog) TableName() string {
+	return "FileSizeLog"
+}
+
+// MonthlyPlanSetting - การตั้งค่า Monthly Plan (single-row, เก็บใน DB เพื่อใช้งานกับ Cloud Run ที่ไม่มี persistent filesystem)
+type MonthlyPlanSetting struct {
+	ID                      int64       `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	LockDay                 int         `gorm:"not null;default:23;column:lockDay" json:"lockDay"`
+	AutoCreateDay           int         `gorm:"not null;default:1;column:autoCreateDay" json:"autoCreateDay"`
+	AutoCreateTarget        string      `gorm:"not null;default:'next_month';column:autoCreateTarget" json:"autoCreateTarget"`
+	AllowedFileTypes        StringArray `gorm:"type:text[];column:allowedFileTypes" json:"allowedFileTypes"`
+	MaxFileSizeMB           *int        `gorm:"column:maxFileSizeMB" json:"maxFileSizeMB"`
+	ReminderStartDay        int         `gorm:"not null;default:20;column:reminderStartDay" json:"reminderStartDay"`
+	AdminCanUploadAfterLock bool        `gorm:"not null;default:true;column:adminCanUploadAfterLock" json:"adminCanUploadAfterLock"`
+	UpdatedAt               time.Time   `gorm:"not null;type:timestamptz(6);column:updatedAt" json:"updatedAt"`
+}
+
+// TableName กำหนดชื่อตารางใน database
+func (MonthlyPlanSetting) TableName() string {
+	return "MonthlyPlanSetting"
+}

@@ -163,6 +163,39 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			}
 		}
 
+		// Monthly Plan File Management
+		monthlyPlanHandler, mpErr := v1.NewMonthlyPlanHandler(db, cfg)
+		if mpErr != nil {
+			log.Printf("Warning: Monthly plan handler initialization failed: %v", mpErr)
+		} else {
+			monthlyPlansV1 := apiV1.Group("/monthly-plans")
+			monthlyPlansV1.Use(authMw.RequireAuth())
+			{
+				// Settings (admin only)
+				adminOnly := monthlyPlansV1.Group("")
+				adminOnly.Use(authMw.RequireRole("admin"))
+				{
+					adminOnly.GET("/settings", monthlyPlanHandler.GetSettings)
+					adminOnly.PUT("/settings", monthlyPlanHandler.UpdateSettings)
+					adminOnly.DELETE("/files/:id/permanent", monthlyPlanHandler.HardDeleteFile)
+					adminOnly.POST("/files/:id/restore", monthlyPlanHandler.RestoreFile)
+				}
+
+				// Period endpoints (all authenticated users)
+				monthlyPlansV1.GET("/:year/:month", monthlyPlanHandler.GetOrCreatePeriod)
+				monthlyPlansV1.GET("/:year/:month/files", monthlyPlanHandler.ListFiles)
+				monthlyPlansV1.GET("/:year/:month/status", monthlyPlanHandler.GetSubmissionStatus)
+
+				// Upload flow (presign + confirm)
+				monthlyPlansV1.POST("/:year/:month/files/presign", monthlyPlanHandler.PresignUpload)
+				monthlyPlansV1.POST("/:year/:month/files", monthlyPlanHandler.ConfirmUpload)
+
+				// File actions
+				monthlyPlansV1.DELETE("/files/:id", monthlyPlanHandler.SoftDeleteFile)
+				monthlyPlansV1.GET("/files/:id/download", monthlyPlanHandler.GetDownloadURL)
+			}
+		}
+
 		// Dashboard — cache 5 minutes (heavy aggregation queries, stale data acceptable)
 		dashboardV1 := apiV1.Group("/dashboard")
 		{

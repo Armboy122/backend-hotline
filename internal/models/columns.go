@@ -25,3 +25,13 @@ var UserCol = struct {
 }{
 	DeletedAt: `"deletedAt"`,
 }
+
+var PlanFileCol = struct {
+	MonthlyPlanID, TeamID, IsDeleted, IsMasterPlan, CreatedAt string
+}{
+	MonthlyPlanID: `"monthlyPlanId"`,
+	TeamID:        `"teamId"`,
+	IsDeleted:     `"isDeleted"`,
+	IsMasterPlan:  `"isMasterPlan"`,
+	CreatedAt:     `"createdAt"`,
+}

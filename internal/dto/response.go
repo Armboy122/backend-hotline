@@ -337,3 +337,96 @@ type ChangePasswordRequest struct {
 	OldPassword string `json:"oldPassword" binding:"required"`
 	NewPassword string `json:"newPassword" binding:"required,min=6"`
 }
+
+// === Monthly Plan DTOs ===
+
+// MonthlyPlanResponse — period ประจำเดือน
+type MonthlyPlanResponse struct {
+	ID        int64  `json:"id"`
+	Year      int    `json:"year"`
+	Month     int    `json:"month"`
+	IsLocked  bool   `json:"isLocked"`
+	CreatedAt string `json:"createdAt"`
+}
+
+// PlanFileUploaderNested — compact uploader info embedded in file responses
+type PlanFileUploaderNested struct {
+	ID       uint   `json:"id"`
+	Username string `json:"username"`
+}
+
+// PlanFileResponse — single file entry
+type PlanFileResponse struct {
+	ID            int64                   `json:"id"`
+	MonthlyPlanID int64                   `json:"monthlyPlanId"`
+	TeamID        *int64                  `json:"teamId"`
+	UploadedByID  int64                   `json:"uploadedById"`
+	FileKey       string                  `json:"fileKey"`
+	FileURL       string                  `json:"fileURL"`
+	FileName      string                  `json:"fileName"`
+	FileSizeBytes int64                   `json:"fileSizeBytes"`
+	Description   *string                 `json:"description"`
+	IsMasterPlan  bool                    `json:"isMasterPlan"`
+	IsDeleted     bool                    `json:"isDeleted"`
+	DeletedAt     *string                 `json:"deletedAt"`
+	CreatedAt     string                  `json:"createdAt"`
+	UpdatedAt     string                  `json:"updatedAt"`
+	Team          *TeamNested             `json:"team,omitempty"`
+	UploadedBy    *PlanFileUploaderNested `json:"uploadedBy,omitempty"`
+}
+
+// PresignPlanFileRequest — ขอ presigned PUT URL สำหรับ PDF upload
+type PresignPlanFileRequest struct {
+	FileName string `json:"fileName" binding:"required"`
+	FileType string `json:"fileType" binding:"required"`
+}
+
+// ConfirmPlanFileRequest — ยืนยันหลังอัพโหลดเสร็จ + save metadata
+type ConfirmPlanFileRequest struct {
+	FileKey       string  `json:"fileKey" binding:"required"`
+	FileURL       string  `json:"fileURL" binding:"required"`
+	FileName      string  `json:"fileName" binding:"required"`
+	FileSizeBytes int64   `json:"fileSizeBytes" binding:"required,min=1"`
+	Description   *string `json:"description"`
+	IsMasterPlan  bool    `json:"isMasterPlan"`
+	// TeamID — optional, admin เท่านั้นที่ระบุได้ เพื่ออัพโหลดแทนทีมอื่น
+	// ถ้าไม่ส่งมา → ใช้ teamId ของ user ที่ login
+	// ถ้า isMasterPlan = true → teamId จะถูก ignore
+	TeamID *int64 `json:"teamId"`
+}
+
+// TeamSubmissionStatus — สถานะการส่งของแต่ละทีม
+type TeamSubmissionStatus struct {
+	Team      TeamNested `json:"team"`
+	Status    string     `json:"status"`    // "submitted" | "pending" | "missed"
+	FileCount int        `json:"fileCount"` // จำนวนไฟล์ที่อัพโหลด
+}
+
+// SubmissionStatusResponse — overview สถานะทุกทีม
+type SubmissionStatusResponse struct {
+	Period   MonthlyPlanResponse    `json:"period"`
+	Deadline string                 `json:"deadline"` // YYYY-MM-DD
+	Teams    []TeamSubmissionStatus `json:"teams"`
+}
+
+// MonthlyPlanSettingsResponse — response สำหรับ GET settings
+type MonthlyPlanSettingsResponse struct {
+	LockDay                 int      `json:"lockDay"`
+	AutoCreateDay           int      `json:"autoCreateDay"`
+	AutoCreateTarget        string   `json:"autoCreateTarget"`
+	AllowedFileTypes        []string `json:"allowedFileTypes"`
+	MaxFileSizeMB           *int     `json:"maxFileSizeMB"`
+	ReminderStartDay        int      `json:"reminderStartDay"`
+	AdminCanUploadAfterLock bool     `json:"adminCanUploadAfterLock"`
+}
+
+// UpdateMonthlyPlanSettingsRequest — request สำหรับ PUT settings
+type UpdateMonthlyPlanSettingsRequest struct {
+	LockDay                 *int     `json:"lockDay"`
+	AutoCreateDay           *int     `json:"autoCreateDay"`
+	AutoCreateTarget        *string  `json:"autoCreateTarget"`
+	AllowedFileTypes        []string `json:"allowedFileTypes"`
+	MaxFileSizeMB           *int     `json:"maxFileSizeMB"`
+	ReminderStartDay        *int     `json:"reminderStartDay"`
+	AdminCanUploadAfterLock *bool    `json:"adminCanUploadAfterLock"`
+}

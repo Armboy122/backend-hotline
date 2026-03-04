@@ -107,3 +107,17 @@ func (r *R2Client) DeleteObject(ctx context.Context, fileKey string) error {
 func (r *R2Client) GetPublicURL(fileKey string) string {
 	return fmt.Sprintf("%s/%s", r.publicURL, fileKey)
 }
+
+// GeneratePresignedGetURL generates a presigned GET URL for downloading a file.
+func (r *R2Client) GeneratePresignedGetURL(ctx context.Context, fileKey string, expiration time.Duration) (string, error) {
+	presignResult, err := r.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(r.bucketName),
+		Key:    aws.String(fileKey),
+	}, func(opts *s3.PresignOptions) {
+		opts.Expires = expiration
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to generate presigned GET URL: %w", err)
+	}
+	return presignResult.URL, nil
+}

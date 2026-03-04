@@ -95,3 +95,25 @@ func ApplyDashboardFilters(year, month, teamID, jobTypeID string) func(*gorm.DB)
 			Scopes(TaskByJobType(jobTypeID))
 	}
 }
+
+// PlanFileNotDeleted filters out soft-deleted PlanFile records.
+func PlanFileNotDeleted(db *gorm.DB) *gorm.DB {
+	return db.Where(PlanFileCol.IsDeleted + " = false")
+}
+
+// PlanFileByPlan filters plan files by monthly plan ID.
+func PlanFileByPlan(monthlyPlanID int64) func(*gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		return db.Where(PlanFileCol.MonthlyPlanID+" = ?", monthlyPlanID)
+	}
+}
+
+// PlanFileByTeam filters plan files by team ID. Skips if teamID is 0.
+func PlanFileByTeam(teamID int64) func(*gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		if teamID == 0 {
+			return db
+		}
+		return db.Where(PlanFileCol.TeamID+" = ?", teamID)
+	}
+}
