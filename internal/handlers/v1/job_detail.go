@@ -87,7 +87,7 @@ func (h *JobDetailHandler) GetByID(c *gin.Context) {
 	}
 
 	var jobDetail models.JobDetail
-	if err := h.db.WithContext(c.Request.Context()).First(&jobDetail, id).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Scopes(models.JobDetailNotDeleted).First(&jobDetail, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, dto.StandardResponse{
 				Success: false,

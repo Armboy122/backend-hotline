@@ -24,7 +24,7 @@ func NewUserHandler(db *gorm.DB) *UserHandler {
 // List - GET /v1/users (admin only)
 func (h *UserHandler) List(c *gin.Context) {
 	var users []models.User
-	if err := h.db.WithContext(c.Request.Context()).Preload("Team").Find(&users).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Scopes(models.UserNotDeleted).Preload("Team").Find(&users).Error; err != nil {
 		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
@@ -75,7 +75,7 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := h.db.WithContext(c.Request.Context()).Preload("Team").First(&user, id).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Scopes(models.UserNotDeleted).Preload("Team").First(&user, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, dto.StandardResponse{
 				Success: false,
@@ -328,24 +328,26 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	result := h.db.WithContext(c.Request.Context()).Delete(&models.User{}, id)
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
-			Success: false,
-			Error: &dto.ErrorInfo{
-				Code:    "INTERNAL_ERROR",
-				Message: result.Error.Error(),
-			},
-		})
-		return
-	}
-
-	if result.RowsAffected == 0 {
+	var user models.User
+	if err := h.db.WithContext(c.Request.Context()).Scopes(models.UserNotDeleted).First(&user, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
 				Code:    "NOT_FOUND",
 				Message: "User not found",
+			},
+		})
+		return
+	}
+
+	now := time.Now()
+	user.DeletedAt = &now
+	if err := h.db.WithContext(c.Request.Context()).Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
+			Success: false,
+			Error: &dto.ErrorInfo{
+				Code:    "INTERNAL_ERROR",
+				Message: err.Error(),
 			},
 		})
 		return

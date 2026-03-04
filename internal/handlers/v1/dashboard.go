@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -32,40 +33,61 @@ func (h *DashboardHandler) Summary(c *gin.Context) {
 		Scopes(models.TaskNotDeleted).
 		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID))
 
-	// Total tasks
-	var totalTasks int64
-	query.Count(&totalTasks)
+	// Concurrent queries using errgroup
+	g, ctx := errgroup.WithContext(ctx)
 
-	// Total job types used
-	var totalJobTypes int64
-	h.db.WithContext(ctx).Model(&models.JobType{}).Count(&totalJobTypes)
+	var totalTasks, totalJobTypes, totalFeeders int64
 
-	// Total feeders used
-	var totalFeeders int64
-	h.db.WithContext(ctx).Model(&models.Feeder{}).Count(&totalFeeders)
+	g.Go(func() error {
+		return query.Count(&totalTasks).Error
+	})
 
-	// Top team
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.JobType{}).Count(&totalJobTypes).Error
+	})
+
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.Feeder{}).Count(&totalFeeders).Error
+	})
+
+	// Top team query (need result for team lookup)
 	type TeamCount struct {
 		TeamID int64
 		Count  int64
 	}
 	var topTeamResult TeamCount
-	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.TeamID+" as TeamID, count(*) as count").
-		Scopes(models.TaskNotDeleted, models.TaskByYear(year), models.TaskByMonth(month)).
-		Group(models.TaskCol.TeamID).
-		Order("count DESC").
-		Limit(1).
-		Find(&topTeamResult)
 
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+			Select(models.TaskCol.TeamID+" as TeamID, count(*) as count").
+			Scopes(models.TaskNotDeleted, models.TaskByYear(year), models.TaskByMonth(month)).
+			Group(models.TaskCol.TeamID).
+			Order("count DESC").
+			Limit(1).
+			Find(&topTeamResult).Error
+	})
+
+	if err := g.Wait(); err != nil {
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
+			Success: false,
+			Error: &dto.ErrorInfo{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to load dashboard data",
+			},
+		})
+		return
+	}
+
+	// Load team details (sequential after getting topTeamResult)
 	var topTeam *dto.TopTeam
 	if topTeamResult.TeamID != 0 {
 		var team models.Team
-		h.db.WithContext(ctx).First(&team, topTeamResult.TeamID)
-		topTeam = &dto.TopTeam{
-			ID:    team.ID,
-			Name:  team.Name,
-			Count: topTeamResult.Count,
+		if err := h.db.WithContext(ctx).First(&team, topTeamResult.TeamID).Error; err == nil {
+			topTeam = &dto.TopTeam{
+				ID:    team.ID,
+				Name:  team.Name,
+				Count: topTeamResult.Count,
+			}
 		}
 	}
 
@@ -101,7 +123,7 @@ func (h *DashboardHandler) TopJobs(c *gin.Context) {
 	var results []JobCount
 
 	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobDetailID+" as JobDetailID, count(*) as count").
+		Select(models.TaskCol.JobDetailID + " as JobDetailID, count(*) as count").
 		Scopes(models.TaskNotDeleted).
 		Scopes(models.ApplyDashboardFilters(year, month, teamID, jobTypeID)).
 		Group(models.TaskCol.JobDetailID).
@@ -369,7 +391,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	}
 	var topJobTypeResult JobTypeCount
 	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobTypeID+" as JobTypeID, count(*) as count").
+		Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
 		Scopes(models.TaskNotDeleted).
 		Group(models.TaskCol.JobTypeID).
 		Order("count DESC").
@@ -446,7 +468,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count     int64
 	}
 	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobTypeID+" as JobTypeID, count(*) as count").
+		Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
 		Scopes(models.TaskNotDeleted).
 		Group(models.TaskCol.JobTypeID).
 		Order("count DESC").
@@ -479,7 +501,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count  int64
 	}
 	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.TeamID+" as TeamID, count(*) as count").
+		Select(models.TaskCol.TeamID + " as TeamID, count(*) as count").
 		Scopes(models.TaskNotDeleted).
 		Group(models.TaskCol.TeamID).
 		Order("count DESC").

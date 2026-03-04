@@ -19,3 +19,9 @@ var JobDetailCol = struct {
 }{
 	DeletedAt: `"deletedAt"`,
 }
+
+var UserCol = struct {
+	DeletedAt string
+}{
+	DeletedAt: `"deletedAt"`,
+}

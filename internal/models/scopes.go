@@ -12,6 +12,11 @@ func JobDetailNotDeleted(db *gorm.DB) *gorm.DB {
 	return db.Where(JobDetailCol.DeletedAt + " IS NULL")
 }
 
+// UserNotDeleted filters out soft-deleted User records.
+func UserNotDeleted(db *gorm.DB) *gorm.DB {
+	return db.Where(UserCol.DeletedAt + " IS NULL")
+}
+
 // TaskByYear filters tasks by year extracted from workdate.
 func TaskByYear(year string) func(*gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
