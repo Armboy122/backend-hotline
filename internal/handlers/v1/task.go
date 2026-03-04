@@ -550,11 +550,29 @@ func (h *TaskHandler) ListByTeam(c *gin.Context) {
 	}
 	offset := (page - 1) * limit
 
-	// Build query with soft delete filter and pagination
+	// Build query with soft delete filter
 	query := h.db.WithContext(ctx).Model(&models.TaskDaily{}).
 		Scopes(models.TaskNotDeleted)
 
-	// Get total count
+	// Apply filters (same as List())
+	if workDate := c.Query("workDate"); workDate != "" {
+		parsedDate, _ := time.Parse("2006-01-02", workDate)
+		query = query.Where("WorkDate = ?", parsedDate)
+	}
+	if teamID := c.Query("teamId"); teamID != "" {
+		id, _ := strconv.ParseInt(teamID, 10, 64)
+		query = query.Where(models.TaskCol.TeamID+" = ?", id)
+	}
+	if jobTypeID := c.Query("jobTypeId"); jobTypeID != "" {
+		id, _ := strconv.ParseInt(jobTypeID, 10, 64)
+		query = query.Where(models.TaskCol.JobTypeID+" = ?", id)
+	}
+	if feederID := c.Query("feederId"); feederID != "" {
+		id, _ := strconv.ParseInt(feederID, 10, 64)
+		query = query.Where(models.TaskCol.FeederID+" = ?", id)
+	}
+
+	// Get total count (now with filters applied)
 	var total int64
 	query.Count(&total)
 
