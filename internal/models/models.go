@@ -5,6 +5,7 @@ package models
 import (
 	"database/sql/driver"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -121,8 +122,8 @@ func (a StringArray) Value() (driver.Value, error) {
 		}
 		// Escape quotes and backslashes
 		escaped := v
-		escaped = replaceAll(escaped, "\\", "\\\\")
-		escaped = replaceAll(escaped, "\"", "\\\"")
+		escaped = strings.ReplaceAll(escaped, "\\", "\\\\")
+		escaped = strings.ReplaceAll(escaped, "\"", "\\\"")
 
 		// Add quotes if contains comma or special characters
 		if containsSpecialChar(escaped) {
@@ -133,29 +134,6 @@ func (a StringArray) Value() (driver.Value, error) {
 	}
 
 	return "{" + result + "}", nil
-}
-
-func replaceAll(s, old, new string) string {
-	result := ""
-	for {
-		idx := indexOfString(s, old)
-		if idx == -1 {
-			result += s
-			break
-		}
-		result += s[:idx] + new
-		s = s[idx+len(old):]
-	}
-	return result
-}
-
-func indexOfString(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
 
 func containsSpecialChar(s string) bool {
