@@ -3,13 +3,13 @@ package v1
 import (
 	"backend-hotlines3/internal/dto"
 	"backend-hotlines3/internal/models"
+	"backend-hotlines3/pkg/password"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -157,7 +157,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		return
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hashedPassword, err := password.HashPassword(req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
@@ -420,7 +420,7 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.OldPassword)); err != nil {
+	if !password.CheckPassword(req.OldPassword, user.Password) {
 		c.JSON(http.StatusUnauthorized, dto.StandardResponse{
 			Success: false,
 			Error: &dto.ErrorInfo{
@@ -431,7 +431,7 @@ func (h *UserHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	hashedPassword, err := password.HashPassword(req.NewPassword)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
