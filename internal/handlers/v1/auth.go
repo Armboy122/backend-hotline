@@ -154,8 +154,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	now := time.Now()
-	user.LastLogin = &now
-	h.db.WithContext(c.Request.Context()).Save(&user)
+	h.db.WithContext(c.Request.Context()).Model(&user).Update("last_login", now)
 
 	accessToken, refreshToken, err := h.jwtManager.GenerateTokenPair(user.ID, user.Username, user.Role)
 	if err != nil {

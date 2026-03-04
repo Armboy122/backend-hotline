@@ -437,8 +437,7 @@ func (h *TaskHandler) Delete(c *gin.Context) {
 
 	// Soft delete
 	now := time.Now()
-	task.DeletedAt = &now
-	if err := h.db.WithContext(c.Request.Context()).Save(&task).Error; err != nil {
+	if err := h.db.WithContext(c.Request.Context()).Model(&task).Update("deleted_at", now).Error; err != nil {
 		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
