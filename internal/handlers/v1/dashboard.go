@@ -373,16 +373,21 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 			Scopes(models.TaskByFeeder(feederID))
 	}
 
-	// Total tasks
-	var totalTasks int64
-	h.db.WithContext(ctx).Model(&models.TaskDaily{}).Scopes(baseScope).Count(&totalTasks)
+	// Concurrent queries using errgroup for independent aggregates
+	g, ctx := errgroup.WithContext(ctx)
 
-	// Active teams (distinct count)
-	var activeTeams int64
-	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Scopes(models.TaskNotDeleted).
-		Select("COUNT(DISTINCT " + models.TaskCol.TeamID + ")").
-		Scan(&activeTeams)
+	var totalTasks, activeTeams int64
+
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).Scopes(baseScope).Count(&totalTasks).Error
+	})
+
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+			Scopes(baseScope).
+			Select("COUNT(DISTINCT " + models.TaskCol.TeamID + ")").
+			Scan(&activeTeams).Error
+	})
 
 	// Top job type
 	type JobTypeCount struct {
@@ -390,20 +395,16 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count     int64
 	}
 	var topJobTypeResult JobTypeCount
-	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
-		Scopes(models.TaskNotDeleted).
-		Group(models.TaskCol.JobTypeID).
-		Order("count DESC").
-		Limit(1).
-		Find(&topJobTypeResult)
 
-	topJobType := ""
-	if topJobTypeResult.JobTypeID != 0 {
-		var jobType models.JobType
-		h.db.WithContext(ctx).First(&jobType, topJobTypeResult.JobTypeID)
-		topJobType = jobType.Name
-	}
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+			Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
+			Scopes(models.TaskNotDeleted).
+			Group(models.TaskCol.JobTypeID).
+			Order("count DESC").
+			Limit(1).
+			Find(&topJobTypeResult).Error
+	})
 
 	// Top feeder
 	type FeederCount struct {
@@ -411,36 +412,108 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count    int64
 	}
 	var topFeederResult FeederCount
-	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
-		Scopes(models.TaskNotDeleted, models.TaskFeederNotNull).
-		Group(models.TaskCol.FeederID).
-		Order("count DESC").
-		Limit(1).
-		Find(&topFeederResult)
 
-	topFeeder := ""
-	if topFeederResult.FeederID != 0 {
-		var feeder models.Feeder
-		h.db.WithContext(ctx).First(&feeder, topFeederResult.FeederID)
-		topFeeder = feeder.Code
-	}
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+			Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+			Scopes(models.TaskNotDeleted, models.TaskFeederNotNull).
+			Group(models.TaskCol.FeederID).
+			Order("count DESC").
+			Limit(1).
+			Find(&topFeederResult).Error
+	})
 
-	// === Charts data (batch loaded to avoid N+1) ===
-
-	// Tasks by feeder — aggregate then batch load names
+	// Tasks by feeder aggregate
 	var feederAgg []struct {
 		FeederID int64
 		Count    int64
 	}
-	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
-		Scopes(models.TaskNotDeleted, models.TaskFeederNotNull).
-		Group(models.TaskCol.FeederID).
-		Order("count DESC").
-		Limit(10).
-		Find(&feederAgg)
 
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+			Select(models.TaskCol.FeederID+" as FeederID, count(*) as count").
+			Scopes(models.TaskNotDeleted, models.TaskFeederNotNull).
+			Group(models.TaskCol.FeederID).
+			Order("count DESC").
+			Limit(10).
+			Find(&feederAgg).Error
+	})
+
+	// Tasks by job type aggregate
+	var jtAgg []struct {
+		JobTypeID int64
+		Count     int64
+	}
+
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+			Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
+			Scopes(models.TaskNotDeleted).
+			Group(models.TaskCol.JobTypeID).
+			Order("count DESC").
+			Find(&jtAgg).Error
+	})
+
+	// Tasks by team aggregate
+	var teamAgg []struct {
+		TeamID int64
+		Count  int64
+	}
+
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+			Select(models.TaskCol.TeamID + " as TeamID, count(*) as count").
+			Scopes(models.TaskNotDeleted).
+			Group(models.TaskCol.TeamID).
+			Order("count DESC").
+			Find(&teamAgg).Error
+	})
+
+	// Tasks by date aggregate
+	var dateResults []struct {
+		Date  string
+		Count int64
+	}
+
+	g.Go(func() error {
+		return h.db.WithContext(ctx).Model(&models.TaskDaily{}).
+			Select("TO_CHAR("+models.TaskCol.WorkDate+", 'YYYY-MM-DD') as date, count(*) as count").
+			Scopes(models.TaskNotDeleted, models.TaskByDateRange(startDate, endDate)).
+			Group("date").
+			Order("date ASC").
+			Find(&dateResults).Error
+	})
+
+	if err := g.Wait(); err != nil {
+		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
+			Success: false,
+			Error: &dto.ErrorInfo{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to load dashboard stats",
+			},
+		})
+		return
+	}
+
+	// Load job type name (sequential after getting topJobTypeResult)
+	topJobType := ""
+	if topJobTypeResult.JobTypeID != 0 {
+		var jobType models.JobType
+		if err := h.db.WithContext(ctx).First(&jobType, topJobTypeResult.JobTypeID).Error; err == nil {
+			topJobType = jobType.Name
+		}
+	}
+
+	// Load feeder code (sequential after getting topFeederResult)
+	topFeeder := ""
+	if topFeederResult.FeederID != 0 {
+		var feeder models.Feeder
+		if err := h.db.WithContext(ctx).First(&feeder, topFeederResult.FeederID).Error; err == nil {
+			topFeeder = feeder.Code
+		}
+	}
+
+	// Build tasks by feeder response
 	var tasksByFeeder []dto.ChartItem
 	if len(feederAgg) > 0 {
 		feederIDs := make([]int64, len(feederAgg))
@@ -462,18 +535,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		}
 	}
 
-	// Tasks by job type — aggregate then batch load names
-	var jtAgg []struct {
-		JobTypeID int64
-		Count     int64
-	}
-	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.JobTypeID + " as JobTypeID, count(*) as count").
-		Scopes(models.TaskNotDeleted).
-		Group(models.TaskCol.JobTypeID).
-		Order("count DESC").
-		Find(&jtAgg)
-
+	// Build tasks by job type response
 	var tasksByJobType []dto.ChartItem
 	if len(jtAgg) > 0 {
 		jtIDs := make([]int64, len(jtAgg))
@@ -495,18 +557,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		}
 	}
 
-	// Tasks by team — aggregate then batch load names
-	var teamAgg []struct {
-		TeamID int64
-		Count  int64
-	}
-	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select(models.TaskCol.TeamID + " as TeamID, count(*) as count").
-		Scopes(models.TaskNotDeleted).
-		Group(models.TaskCol.TeamID).
-		Order("count DESC").
-		Find(&teamAgg)
-
+	// Build tasks by team response
 	var tasksByTeam []dto.ChartItem
 	if len(teamAgg) > 0 {
 		teamIDs := make([]int64, len(teamAgg))
@@ -528,18 +579,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		}
 	}
 
-	// Tasks by date — no N+1 issue (pure aggregate)
-	var dateResults []struct {
-		Date  string
-		Count int64
-	}
-	h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Select("TO_CHAR("+models.TaskCol.WorkDate+", 'YYYY-MM-DD') as date, count(*) as count").
-		Scopes(models.TaskNotDeleted, models.TaskByDateRange(startDate, endDate)).
-		Group("date").
-		Order("date ASC").
-		Find(&dateResults)
-
+	// Tasks by date response
 	tasksByDate := make([]dto.DateChartItem, 0, len(dateResults))
 	for _, r := range dateResults {
 		tasksByDate = append(tasksByDate, dto.DateChartItem{

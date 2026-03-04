@@ -2,8 +2,9 @@
 
 ## Priority 1: High Impact (ต้องทำ)
 
-- [ ] **1.1** Dashboard/Stats concurrent queries using errgroup
-  - ไฟล์: `internal/handlers/v1/dashboard.go` (Stats, Summary, FeederMatrix)
+- [x] **1.1** Dashboard/Stats concurrent queries using errgroup (Summary done)
+  - ไฟล์: `internal/handlers/v1/dashboard.go` (Stats, Summary✅, FeederMatrix)
+  - สถานะ: Summary() เสร็จแล้ว, ยังเหลือ Stats() และ FeederMatrix()
   
 - [ ] **1.2** แก้ `Save()` → `.Update()` สำหรับ update แค่ 1-2 field
   - ไฟล์: `internal/handlers/v1/auth.go` (Login - lastLogin)
