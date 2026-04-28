@@ -1,8 +1,12 @@
 package v1
 
 import (
+	"backend-hotlines3/internal/adapter/out/persistence/gorm"
+	taskusecase "backend-hotlines3/internal/app/task/usecase"
+	taskdomain "backend-hotlines3/internal/domain/task"
 	"backend-hotlines3/internal/dto"
 	"backend-hotlines3/internal/models"
+	"backend-hotlines3/internal/port/outbound/repository"
 	"log"
 	"net/http"
 	"strconv"
@@ -14,11 +18,16 @@ import (
 )
 
 type TaskHandler struct {
-	db *gorm.DB
+	db              *gorm.DB
+	taskListUseCase *taskusecase.ListTasksUseCase
 }
 
 func NewTaskHandler(db *gorm.DB) *TaskHandler {
-	return &TaskHandler{db: db}
+	taskRepo := gorm.NewTaskRepository(db)
+	return &TaskHandler{
+		db:              db,
+		taskListUseCase: taskusecase.NewListTasksUseCase(taskRepo),
+	}
 }
 
 // convertTaskToResponse converts a TaskDaily model to TaskResponse DTO
@@ -98,6 +107,59 @@ func convertTaskToResponse(task *models.TaskDaily) dto.TaskResponse {
 	return response
 }
 
+func convertDomainTaskToResponse(task taskdomain.Entity) dto.TaskResponse {
+	response := dto.TaskResponse{
+		ID:          task.ID,
+		WorkDate:    task.WorkDate.Format("2006-01-02"),
+		TeamID:      task.TeamID,
+		JobTypeID:   task.JobTypeID,
+		JobDetailID: task.JobDetailID,
+		FeederID:    task.FeederID,
+		NumPole:     task.NumPole,
+		DeviceCode:  task.DeviceCode,
+		Detail:      task.Detail,
+		URLsBefore:  task.URLsBefore,
+		URLsAfter:   task.URLsAfter,
+		Latitude:    task.Latitude,
+		Longitude:   task.Longitude,
+		CreatedAt:   task.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   task.UpdatedAt.Format(time.RFC3339),
+	}
+
+	if task.DeletedAt != nil {
+		formatted := task.DeletedAt.Format(time.RFC3339)
+		response.DeletedAt = &formatted
+	}
+	if task.TeamName != nil {
+		response.Team = &dto.TeamNested{ID: task.TeamID, Name: *task.TeamName}
+	}
+	if task.JobTypeName != nil {
+		response.JobType = &dto.JobTypeNested{ID: task.JobTypeID, Name: *task.JobTypeName}
+	}
+	if task.JobDetailName != nil {
+		response.JobDetail = &dto.JobDetailNested{ID: task.JobDetailID, Name: *task.JobDetailName}
+	}
+	if task.FeederID != nil && task.FeederCode != nil {
+		response.Feeder = &dto.FeederNestedForTask{
+			ID:   *task.FeederID,
+			Code: *task.FeederCode,
+		}
+		if task.StationName != nil {
+			response.Feeder.Station = &dto.StationNestedSimple{
+				Name: *task.StationName,
+			}
+			if task.OperationCenterID != nil && task.OperationCenterName != nil {
+				response.Feeder.Station.OperationCenter = &dto.OperationCenterNested{
+					ID:   *task.OperationCenterID,
+					Name: *task.OperationCenterName,
+				}
+			}
+		}
+	}
+
+	return response
+}
+
 // List - GET /v1/tasks
 func (h *TaskHandler) List(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -111,45 +173,30 @@ func (h *TaskHandler) List(c *gin.Context) {
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
-	offset := (page - 1) * limit
-
-	// Build query with soft delete filter
-	query := h.db.WithContext(ctx).Model(&models.TaskDaily{}).
-		Scopes(models.TaskNotDeleted)
-
-	// Apply filters
+	filter := repository.TaskListFilter{}
 	if workDate := c.Query("workDate"); workDate != "" {
 		parsedDate, _ := time.Parse("2006-01-02", workDate)
-		query = query.Where("WorkDate = ?", parsedDate)
+		filter.WorkDate = &parsedDate
 	}
 	if teamID := c.Query("teamId"); teamID != "" {
 		id, _ := strconv.ParseInt(teamID, 10, 64)
-		query = query.Where(models.TaskCol.TeamID+" = ?", id)
+		filter.TeamID = &id
 	}
 	if jobTypeID := c.Query("jobTypeId"); jobTypeID != "" {
 		id, _ := strconv.ParseInt(jobTypeID, 10, 64)
-		query = query.Where(models.TaskCol.JobTypeID+" = ?", id)
+		filter.JobTypeID = &id
 	}
 	if feederID := c.Query("feederId"); feederID != "" {
 		id, _ := strconv.ParseInt(feederID, 10, 64)
-		query = query.Where(models.TaskCol.FeederID+" = ?", id)
+		filter.FeederID = &id
 	}
 
-	// Get total count
-	var total int64
-	query.Count(&total)
-
-	// Get tasks with pagination
-	var tasks []models.TaskDaily
-	if err := query.
-		Preload("Team").
-		Preload("JobType").
-		Preload("JobDetail").
-		Preload("Feeder.Station.OperationCenter").
-		Order("WorkDate DESC, CreatedAt DESC").
-		Offset(offset).
-		Limit(limit).
-		Find(&tasks).Error; err != nil {
+	result, err := h.taskListUseCase.Execute(ctx, taskusecase.ListTasksInput{
+		Page:   page,
+		Limit:  limit,
+		Filter: filter,
+	})
+	if err != nil {
 		log.Printf("Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
@@ -162,18 +209,18 @@ func (h *TaskHandler) List(c *gin.Context) {
 	}
 
 	// Convert to response
-	response := make([]dto.TaskResponse, 0, len(tasks))
-	for _, task := range tasks {
-		response = append(response, convertTaskToResponse(&task))
+	response := make([]dto.TaskResponse, 0, len(result.Tasks))
+	for _, task := range result.Tasks {
+		response = append(response, convertDomainTaskToResponse(task))
 	}
 
 	c.JSON(http.StatusOK, dto.StandardResponse{
 		Success: true,
 		Data:    response,
 		Meta: &dto.Meta{
-			Page:  page,
-			Limit: limit,
-			Total: total,
+			Page:  result.Page,
+			Limit: result.Limit,
+			Total: result.Total,
 		},
 	})
 }
