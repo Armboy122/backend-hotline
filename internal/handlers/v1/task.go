@@ -1,7 +1,8 @@
 package v1
 
 import (
-	"backend-hotlines3/internal/adapter/out/persistence/gorm"
+	"context"
+	taskgorm "backend-hotlines3/internal/adapter/out/persistence/gorm"
 	taskusecase "backend-hotlines3/internal/app/task/usecase"
 	taskdomain "backend-hotlines3/internal/domain/task"
 	"backend-hotlines3/internal/dto"
@@ -17,13 +18,18 @@ import (
 	"gorm.io/gorm"
 )
 
+// listTasksPort lets the handler accept a fake in tests.
+type listTasksPort interface {
+	Execute(ctx context.Context, input taskusecase.ListTasksInput) (*taskusecase.ListTasksOutput, error)
+}
+
 type TaskHandler struct {
 	db              *gorm.DB
-	taskListUseCase *taskusecase.ListTasksUseCase
+	taskListUseCase listTasksPort
 }
 
 func NewTaskHandler(db *gorm.DB) *TaskHandler {
-	taskRepo := gorm.NewTaskRepository(db)
+	taskRepo := taskgorm.NewTaskRepository(db)
 	return &TaskHandler{
 		db:              db,
 		taskListUseCase: taskusecase.NewListTasksUseCase(taskRepo),
