@@ -9,6 +9,7 @@ import (
 	"backend-hotlines3/internal/config"
 	mpusecase "backend-hotlines3/internal/app/monthlyplan/usecase"
 	v1 "backend-hotlines3/internal/handlers/v1"
+	monthlyplanmodule "backend-hotlines3/internal/modules/monthlyplan"
 	taskmodule "backend-hotlines3/internal/modules/task"
 	"backend-hotlines3/internal/middleware"
 	"backend-hotlines3/pkg/jwt"
@@ -182,10 +183,10 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 		if mpR2Err != nil {
 			log.Printf("Warning: R2 client init failed: %v", mpR2Err)
 		}
-		var monthlyPlanHandler *v1.MonthlyPlanHandler
+	var monthlyPlanController *monthlyplanmodule.Controller
 		if mpR2Err == nil {
 			r2Storage := storageadapter.NewR2StorageAdapter(r2Client)
-			monthlyPlanHandler = v1.NewMonthlyPlanHandler(v1.MonthlyPlanHandlerDeps{
+			mpHandler := v1.NewMonthlyPlanHandler(v1.MonthlyPlanHandlerDeps{
 				GetSettingsUC:      mpusecase.NewGetSettingsUseCase(mpRepo),
 				UpdateSettingsUC:   mpusecase.NewUpdateSettingsUseCase(mpRepo),
 				EnsurePeriodUC:     mpusecase.NewEnsurePeriodUseCase(mpRepo),
@@ -194,15 +195,16 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 				ListFilesUC:        mpusecase.NewListFilesUseCase(mpRepo),
 				GetFileUC:          mpusecase.NewGetFileUseCase(mpRepo),
 				SoftDeleteFileUC:   mpusecase.NewSoftDeleteFileUseCase(mpRepo),
-				RestoreFileUC:     mpusecase.NewRestoreFileUseCase(mpRepo),
+				RestoreFileUC:      mpusecase.NewRestoreFileUseCase(mpRepo),
 				HardDeleteFileUC:   mpusecase.NewHardDeleteFileUseCase(mpRepo, r2Storage),
 				SubmissionStatusUC: mpusecase.NewGetSubmissionStatusUseCase(mpRepo),
 				DownloadURLFunc: func(fileKey string) (string, error) {
 					return r2Storage.PresignDownload(context.Background(), fileKey, 15*time.Minute)
 				},
 			})
+			monthlyPlanController = monthlyplanmodule.NewController(mpHandler)
 		}
-		if monthlyPlanHandler != nil {
+		if monthlyPlanController != nil {
 			monthlyPlansV1 := apiV1.Group("/monthly-plans")
 			monthlyPlansV1.Use(authMw.RequireAuth())
 			{
@@ -210,24 +212,24 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 				adminOnly := monthlyPlansV1.Group("")
 				adminOnly.Use(authMw.RequireRole("admin"))
 				{
-					adminOnly.GET("/settings", monthlyPlanHandler.GetSettings)
-					adminOnly.PUT("/settings", monthlyPlanHandler.UpdateSettings)
-					adminOnly.DELETE("/files/:id/permanent", monthlyPlanHandler.HardDeleteFile)
-					adminOnly.POST("/files/:id/restore", monthlyPlanHandler.RestoreFile)
+					adminOnly.GET("/settings", monthlyPlanController.GetSettings)
+					adminOnly.PUT("/settings", monthlyPlanController.UpdateSettings)
+					adminOnly.DELETE("/files/:id/permanent", monthlyPlanController.HardDeleteFile)
+					adminOnly.POST("/files/:id/restore", monthlyPlanController.RestoreFile)
 				}
 
 				// Period endpoints (all authenticated users)
-				monthlyPlansV1.GET("/:year/:month", monthlyPlanHandler.GetOrCreatePeriod)
-				monthlyPlansV1.GET("/:year/:month/files", monthlyPlanHandler.ListFiles)
-				monthlyPlansV1.GET("/:year/:month/status", monthlyPlanHandler.GetSubmissionStatus)
+				monthlyPlansV1.GET("/:year/:month", monthlyPlanController.GetOrCreatePeriod)
+				monthlyPlansV1.GET("/:year/:month/files", monthlyPlanController.ListFiles)
+				monthlyPlansV1.GET("/:year/:month/status", monthlyPlanController.GetSubmissionStatus)
 
 				// Upload flow (presign + confirm)
-				monthlyPlansV1.POST("/:year/:month/files/presign", monthlyPlanHandler.PresignUpload)
-				monthlyPlansV1.POST("/:year/:month/files", monthlyPlanHandler.ConfirmUpload)
+				monthlyPlansV1.POST("/:year/:month/files/presign", monthlyPlanController.PresignUpload)
+				monthlyPlansV1.POST("/:year/:month/files", monthlyPlanController.ConfirmUpload)
 
 				// File actions
-				monthlyPlansV1.DELETE("/files/:id", monthlyPlanHandler.SoftDeleteFile)
-				monthlyPlansV1.GET("/files/:id/download", monthlyPlanHandler.GetDownloadURL)
+				monthlyPlansV1.DELETE("/files/:id", monthlyPlanController.SoftDeleteFile)
+				monthlyPlansV1.GET("/files/:id/download", monthlyPlanController.GetDownloadURL)
 			}
 		}
 
