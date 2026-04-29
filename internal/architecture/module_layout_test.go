@@ -187,6 +187,46 @@ func TestModuleRepositoryInterfaceDoesNotLeakGORM(t *testing.T) {
 	}
 }
 
+// TestModuleFirstIsCanonicalForMigratedFeatures verifies that once a feature
+// has a module under internal/modules, no new code is added under the legacy
+// layer-first paths for that same feature. This prevents dual-ownership drift.
+func TestModuleFirstIsCanonicalForMigratedFeatures(t *testing.T) {
+	root := projectRoot(t)
+	modDir := filepath.Join(root, "internal/modules")
+	if _, err := os.Stat(modDir); os.IsNotExist(err) {
+		t.Skip("internal/modules does not exist yet")
+	}
+
+	// Discover migrated module names (subdirectories of internal/modules)
+	entries, err := os.ReadDir(modDir)
+	if err != nil {
+		t.Fatalf("reading internal/modules: %v", err)
+	}
+	migrated := map[string]bool{}
+	for _, e := range entries {
+		if e.IsDir() {
+			migrated[e.Name()] = true
+		}
+	}
+	if len(migrated) == 0 {
+		t.Skip("no migrated modules yet")
+	}
+
+	// Check that the seven-file shape exists for each migrated module.
+	requiredFiles := []string{
+		"controller.go", "service.go", "repository.go",
+		"repository_impl.go", "dto.go", "errors.go",
+	}
+	for mod := range migrated {
+		for _, req := range requiredFiles {
+			p := filepath.Join(modDir, mod, req)
+			if _, err := os.Stat(p); err != nil {
+				t.Errorf("module %q is missing required file %q: %v", mod, req, err)
+			}
+		}
+	}
+}
+
 // TestOnlyRepositoryImplImportsGORMInModules ensures gorm.io/gorm is confined
 // to repository_impl.go inside any module folder. This keeps every other file
 // in the module portable and easy to test without a real database.

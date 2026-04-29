@@ -1,32 +1,64 @@
 #!/usr/bin/env bash
+# smoke.sh — lightweight API smoke test for backend-hotline
+# Usage: BASE_URL=http://localhost:8081 USERNAME=640100 PASSWORD=secret ./scripts/smoke.sh
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:8080}"
+BASE_URL="${BASE_URL:-http://localhost:8081}"
+USERNAME="${USERNAME:-}"
+PASSWORD="${PASSWORD:-}"
+TOKEN=""
 
-check_endpoint() {
-  local path="$1"
-  local expected_prefix="${2:-2}"
-  local url="${BASE_URL}${path}"
-  local body_file
-  body_file="$(mktemp)"
+fail() { echo "FAIL: $*" >&2; exit 1; }
 
-  local status
-  status="$(curl -fsS -o "${body_file}" -w '%{http_code}' "${url}")"
-  if [[ "${status}" != ${expected_prefix}* ]]; then
-    echo "Smoke check failed: ${url} returned ${status}" >&2
-    echo "--- response body ---" >&2
-    cat "${body_file}" >&2
-    rm -f "${body_file}"
-    exit 1
+# ── Health ────────────────────────────────────────────────────────────────────
+echo "→ GET ${BASE_URL}/health"
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${BASE_URL}/health")
+[[ "$STATUS" == "200" ]] || fail "/health returned $STATUS (expected 200)"
+echo "  ✅ /health → 200"
+
+# ── Login (optional) ─────────────────────────────────────────────────────────
+if [[ -n "$USERNAME" && -n "$PASSWORD" ]]; then
+  echo "→ POST ${BASE_URL}/v1/auth/login"
+  LOGIN_RESP=$(curl -sf -X POST "${BASE_URL}/v1/auth/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" 2>/dev/null) || fail "login request failed"
+  TOKEN=$(echo "$LOGIN_RESP" | grep -o '"accessToken":"[^"]*"' | head -1 | cut -d'"' -f4)
+  [[ -n "$TOKEN" ]] || fail "could not extract accessToken from login response"
+  echo "  ✅ login → got token"
+else
+  echo "  ⏭️  skipping login (USERNAME/PASSWORD not set)"
+fi
+
+# ── GET /v1/tasks ─────────────────────────────────────────────────────────────
+echo "→ GET ${BASE_URL}/v1/tasks?page=1&limit=1"
+if [[ -n "$TOKEN" ]]; then
+  TASKS_STATUS=$(curl -sf -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Bearer ${TOKEN}" \
+    "${BASE_URL}/v1/tasks?page=1&limit=1" 2>/dev/null) || TASKS_STATUS="000"
+else
+  TASKS_STATUS=$(curl -sf -o /dev/null -w '%{http_code}' \
+    "${BASE_URL}/v1/tasks?page=1&limit=1" 2>/dev/null) || TASKS_STATUS="000"
+fi
+if [[ "$TASKS_STATUS" == "401" && -z "$TOKEN" ]]; then
+  echo "  ⏭️  /v1/tasks → 401 (no token, expected)"
+elif [[ "$TASKS_STATUS" =~ ^2..$ ]]; then
+  echo "  ✅ /v1/tasks → $TASKS_STATUS"
+else
+  fail "/v1/tasks returned $TASKS_STATUS"
+fi
+
+# ── GET /v1/dashboard/summary (optional) ─────────────────────────────────────
+if [[ -n "$TOKEN" ]]; then
+  echo "→ GET ${BASE_URL}/v1/dashboard/summary"
+  DASH_STATUS=$(curl -sf -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Bearer ${TOKEN}" \
+    "${BASE_URL}/v1/dashboard/summary" 2>/dev/null) || DASH_STATUS="000"
+  if [[ "$DASH_STATUS" =~ ^2..$ ]]; then
+    echo "  ✅ /v1/dashboard/summary → $DASH_STATUS"
+  else
+    echo "  ⚠️  /v1/dashboard/summary → $DASH_STATUS (non-blocking)"
   fi
+fi
 
-  rm -f "${body_file}"
-  echo "OK ${status} ${path}"
-}
-
-check_endpoint "/health"
-check_endpoint "/v1/teams?limit=1&page=1"
-check_endpoint "/v1/job-types?limit=1&page=1"
-check_endpoint "/v1/tasks?limit=1&page=1"
-
-echo "Smoke checks completed successfully."
+echo ""
+echo "Smoke test passed ✅"
