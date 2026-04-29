@@ -26,6 +26,24 @@ func (f *fakeTaskRepo) List(_ context.Context, q repository.TaskListQuery) ([]ta
 	f.capturedQuery = q
 	return f.returnTasks, f.returnTotal, f.returnErr
 }
+func (f *fakeTaskRepo) GetByID(_ context.Context, _ repository.TaskGetQuery) (*taskdomain.Entity, error) {
+	return nil, nil
+}
+func (f *fakeTaskRepo) Create(_ context.Context, _ repository.TaskCreateInput) (*taskdomain.Entity, error) {
+	return nil, nil
+}
+func (f *fakeTaskRepo) Update(_ context.Context, _ repository.TaskUpdateInput) (*taskdomain.Entity, error) {
+	return nil, nil
+}
+func (f *fakeTaskRepo) SoftDelete(_ context.Context, _ repository.TaskDeleteCommand) error {
+	return nil
+}
+func (f *fakeTaskRepo) ListByTeam(_ context.Context, _ repository.TaskByTeamQuery) ([]taskdomain.Entity, int64, error) {
+	return nil, 0, nil
+}
+func (f *fakeTaskRepo) ListByFilter(_ context.Context, _ repository.TaskByFilterQuery) ([]taskdomain.Entity, error) {
+	return nil, nil
+}
 
 // ── A4.1 Pagination normalization ─────────────────────────────────────────────
 

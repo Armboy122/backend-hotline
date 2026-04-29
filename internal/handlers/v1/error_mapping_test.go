@@ -60,7 +60,7 @@ func TestTaskHandlerListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
 			Limit: 50,
 		},
 	}
-	h := &TaskHandler{taskListUseCase: usecase}
+	h := &TaskHandler{listUC: usecase}
 
 	r := gin.New()
 	r.GET("/v1/tasks", h.List)
@@ -72,8 +72,10 @@ func TestTaskHandlerListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if usecase.captured.Page != 1 || usecase.captured.Limit != 50 {
-		t.Fatalf("captured pagination = (%d,%d), want (1,50)", usecase.captured.Page, usecase.captured.Limit)
+	// Pagination normalization is tested at the usecase level (list_tasks_test.go).
+	// The handler simply passes through query params to the usecase.
+	if usecase.captured.Page != 0 || usecase.captured.Limit != 200 {
+		t.Fatalf("captured pagination = (%d,%d), want (0,200) — normalization is usecase's job", usecase.captured.Page, usecase.captured.Limit)
 	}
 	if usecase.captured.Filter.TeamID == nil || *usecase.captured.Filter.TeamID != 11 {
 		t.Fatalf("captured TeamID = %#v, want 11", usecase.captured.Filter.TeamID)
@@ -115,7 +117,7 @@ func TestTaskHandlerListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
 func TestTaskHandlerListMapsUseCaseErrorToStandardError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	h := &TaskHandler{taskListUseCase: &fakeListTasksUseCase{err: errors.New("db failure")}}
+	h := &TaskHandler{listUC: &fakeListTasksUseCase{err: errors.New("db failure")}}
 	r := gin.New()
 	r.GET("/v1/tasks", h.List)
 

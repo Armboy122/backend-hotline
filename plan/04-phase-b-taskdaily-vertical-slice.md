@@ -4,6 +4,28 @@
 
 Complete the TaskDaily module so all `/v1/tasks*` endpoints use application usecases and repository ports. This creates the pattern for later domains.
 
+## ✅ Phase B COMPLETE (2026-04-29)
+
+All B1–B5 tasks delivered. `go vet`, `go build`, `go test ./...` all pass.
+
+### Summary of changes:
+- **B1:** Expanded `TaskRepository` interface with `GetByID`, `Create`, `Update`, `SoftDelete`, `ListByTeam`, `ListByFilter` + query/input structs
+- **B1:** Implemented all 6 methods in GORM adapter (`internal/adapter/out/persistence/gorm/task_repository.go`)
+- **B2:** Created 7 usecases: `GetTask`, `CreateTask`, `UpdateTask`, `DeleteTask`, `ListTasks` (existing), `ListTasksByTeam`, `ListTasksByFilter` + shared `errors.go`
+- **B3:** Refactored `TaskHandler` to use single-method port interfaces, delegate all 7 endpoints to usecases
+- **B4:** Updated existing handler tests for new struct fields, pagination normalization moved to usecase layer
+- **B5:** Response compatibility maintained — `convertDomainTaskToResponse` handles nested team/job/feeder/station
+- **Router:** Updated to create `gormadapter.NewTaskRepository(db)` before passing to `NewTaskHandler`
+
+### Files modified:
+- `internal/port/outbound/repository/task_repository.go` — expanded interface
+- `internal/adapter/out/persistence/gorm/task_repository.go` — full GORM impl
+- `internal/app/task/usecase/` — 8 new files (7 usecases + errors.go)
+- `internal/handlers/v1/task.go` — complete handler rewrite
+- `internal/handlers/v1/error_mapping_test.go` — updated for new struct
+- `internal/app/task/usecase/list_tasks_test.go` — updated fakeTaskRepo
+- `internal/router/router.go` — wiring update
+
 ## B1 - Expand task repository contract
 
 **Objective:** Make the repository interface express all task operations without leaking GORM models.

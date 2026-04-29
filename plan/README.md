@@ -32,11 +32,17 @@
 | 11 | [`98-session-log-2026-04-28.md`](./98-session-log-2026-04-28.md) | This session's analysis and parallel-agent notes |
 | 12 | [`08-phase-a-wave-1-task-board.md`](./08-phase-a-wave-1-task-board.md) | Wave 1 agent split and execution board |
 
+## Phase progress
+
+- ✅ **Phase A** — Test + Architecture Hardening (complete)
+- ✅ **Phase B** — TaskDaily Vertical Slice (complete 2026-04-29)
+- ⬜ **Phase C** — Monthly Plan Workflow Modularize
+- ⬜ **Phase D** — Dashboard + Master Data
+- ⬜ **Phase E** — Auth/User + Deploy Hardening
+
 ## Immediate recommended next task
 
-Start with **A1** in [`03-phase-a-test-and-architecture-hardening.md`](./03-phase-a-test-and-architecture-hardening.md): add architecture boundary tests.
-
-Reason: this repo already has a partial TaskDaily hexagonal slice, while most handlers still use direct GORM. Boundary tests prevent future refactor work from making the transition more inconsistent.
+Start with **C1** in [`05-phase-c-monthly-plan-workflow.md`](./05-phase-c-monthly-plan-workflow.md): extract monthly plan module boundaries.
 
 ## Quality gate for every phase
 

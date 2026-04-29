@@ -1,12 +1,18 @@
 package router
 
 import (
+	"context"
+	"time"
+
+	gormadapter "backend-hotlines3/internal/adapter/out/persistence/gorm"
+	storageadapter "backend-hotlines3/internal/adapter/out/storage"
 	"backend-hotlines3/internal/config"
+	mpusecase "backend-hotlines3/internal/app/monthlyplan/usecase"
 	v1 "backend-hotlines3/internal/handlers/v1"
 	"backend-hotlines3/internal/middleware"
 	"backend-hotlines3/pkg/jwt"
+	"backend-hotlines3/pkg/s3"
 	"log"
-	"time"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
@@ -141,7 +147,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 		// Tasks
 		tasksV1 := apiV1.Group("/tasks")
 		{
-			handler := v1.NewTaskHandler(db)
+			handler := v1.NewTaskHandler(gormadapter.NewTaskRepository(db))
 			tasksV1.GET("", middleware.CachePublic(60), handler.List)                    // cache 1 min (paginated, dynamic filters)
 			tasksV1.GET("/by-team", middleware.CachePublic(120), handler.ListByTeam)     // cache 2 min
 			tasksV1.GET("/by-filter", middleware.CachePublic(180), handler.ListByFilter) // cache 3 min (per year/month combo)
@@ -163,11 +169,39 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			}
 		}
 
-		// Monthly Plan File Management
-		monthlyPlanHandler, mpErr := v1.NewMonthlyPlanHandler(db, cfg)
-		if mpErr != nil {
-			log.Printf("Warning: Monthly plan handler initialization failed: %v", mpErr)
-		} else {
+		// Monthly Plan File Management — wired via use cases
+		mpRepo := gormadapter.NewMonthlyPlanRepository(db)
+		r2Client, mpR2Err := s3.NewR2Client(s3.R2Config{
+			AccountID:       cfg.Cloudflare.R2.AccountID,
+			AccessKeyID:     cfg.Cloudflare.R2.AccessKeyID,
+			SecretAccessKey: cfg.Cloudflare.R2.SecretAccessKey,
+			BucketName:      cfg.Cloudflare.R2.BucketName,
+			PublicURL:       cfg.Cloudflare.R2.PublicURL,
+		})
+		if mpR2Err != nil {
+			log.Printf("Warning: R2 client init failed: %v", mpR2Err)
+		}
+		var monthlyPlanHandler *v1.MonthlyPlanHandler
+		if mpR2Err == nil {
+			r2Storage := storageadapter.NewR2StorageAdapter(r2Client)
+			monthlyPlanHandler = v1.NewMonthlyPlanHandler(v1.MonthlyPlanHandlerDeps{
+				GetSettingsUC:      mpusecase.NewGetSettingsUseCase(mpRepo),
+				UpdateSettingsUC:   mpusecase.NewUpdateSettingsUseCase(mpRepo),
+				EnsurePeriodUC:     mpusecase.NewEnsurePeriodUseCase(mpRepo),
+				PresignUploadUC:    mpusecase.NewPresignUploadUseCase(mpRepo, r2Storage),
+				ConfirmUploadUC:    mpusecase.NewConfirmUploadUseCase(mpRepo),
+				ListFilesUC:        mpusecase.NewListFilesUseCase(mpRepo),
+				GetFileUC:          mpusecase.NewGetFileUseCase(mpRepo),
+				SoftDeleteFileUC:   mpusecase.NewSoftDeleteFileUseCase(mpRepo),
+				RestoreFileUC:     mpusecase.NewRestoreFileUseCase(mpRepo),
+				HardDeleteFileUC:   mpusecase.NewHardDeleteFileUseCase(mpRepo, r2Storage),
+				SubmissionStatusUC: mpusecase.NewGetSubmissionStatusUseCase(mpRepo),
+				DownloadURLFunc: func(fileKey string) (string, error) {
+					return r2Storage.PresignDownload(context.Background(), fileKey, 15*time.Minute)
+				},
+			})
+		}
+		if monthlyPlanHandler != nil {
 			monthlyPlansV1 := apiV1.Group("/monthly-plans")
 			monthlyPlansV1.Use(authMw.RequireAuth())
 			{

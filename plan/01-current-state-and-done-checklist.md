@@ -137,7 +137,13 @@ PUT    /v1/users/:id/password
 - [ ] `TaskHandler.Update` uses a usecase
 - [ ] `TaskHandler.Delete` uses a usecase
 - [ ] `TaskHandler.ListByTeam` uses a usecase/query service
-- [ ] `TaskHandler.ListByFilter` uses a usecase/query service
+- [x] `TaskHandler.List` delegates to `ListTasksUseCase` via port interface
+- [x] `TaskHandler.GetByID` delegates to `GetTaskUseCase`
+- [x] `TaskHandler.Create` delegates to `CreateTaskUseCase`
+- [x] `TaskHandler.Update` delegates to `UpdateTaskUseCase`
+- [x] `TaskHandler.Delete` delegates to `DeleteTaskUseCase`
+- [x] `TaskHandler.ListByTeam` delegates to `ListTasksByTeamUseCase`
+- [x] `TaskHandler.ListByFilter` uses a usecase/query service
 
 ### Handler-heavy areas
 
