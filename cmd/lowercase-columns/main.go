@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"backend-hotlines3/internal/config"
-	"backend-hotlines3/internal/database"
+	dbpkg "backend-hotlines3/pkg/db"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	db, err := database.Connect(ctx, cfg)
+	db, err := dbpkg.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect database: %v", err)
 	}

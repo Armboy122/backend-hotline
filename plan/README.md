@@ -1,68 +1,68 @@
 # Backend Hotline Refactor Plan Index
 
-> This folder is the execution map for `backend-hotline`. It is modeled after the provided `smart-cover-connect-backend/plan` folder, but scoped to this repo's actual Gin/GORM/Viper structure and Hotline domain.
+This folder is the execution map for moving `backend-hotline` to the Hinghoi backend style used by `/Users/sakdithat/Desktop/Devpool/hinghoi-backend`.
 
-## Structure rule (READ FIRST)
+## Structure Rule
 
-> **All code from Phase A onward MUST follow the module-first vertical-slice layout defined in [`00-structure-reset.md`](./00-structure-reset.md).**
->
-> Each module lives under `internal/modules/<module>/` with `controller.go`, `service.go`, `repository.go`, `repository_impl.go`, `dto.go`, `errors.go`, and `entity.go` as needed. Do **not** create new code in the legacy layer-first locations (`internal/domain/`, `internal/app/`, `internal/port/`, `internal/adapter/`, `internal/handlers/v1/`); only modify them as part of a migration into a module folder. The example pilot lives at `internal/modules/task/`.
+All new feature work must use:
 
-## How to use this plan set
+```text
+internal/feature/<feature>/
+  controller/
+  service/
+  repository/
+  dto/
+  entity/
+  mapper/
+```
 
-0. Read product/domain notes first:
-   - `/Users/sakdithat/Downloads/hotline_prd.md`
-   - `/Users/sakdithat/Downloads/hotline_domain_map.md`
-   - `/Users/sakdithat/Downloads/backend_hotline_repo_evidence.md`
-1. Read [`00-structure-reset.md`](./00-structure-reset.md) before changing code.
-2. Then read [`00-backend-architecture.md`](./00-backend-architecture.md) for the detailed rules.
-3. Check [`01-current-state-and-done-checklist.md`](./01-current-state-and-done-checklist.md) to avoid redoing completed work.
+The previous `internal/modules/<module>` direction is deprecated. Existing module folders are transitional source only.
+
+## How To Use This Plan Set
+
+1. Read [`00-structure-reset.md`](./00-structure-reset.md).
+2. Read [`00-backend-architecture.md`](./00-backend-architecture.md).
+3. Check [`01-current-state-and-done-checklist.md`](./01-current-state-and-done-checklist.md).
 4. Work through [`02-execution-backlog.md`](./02-execution-backlog.md) in order.
-5. Assign one task card at a time to an agent.
-6. Every code task should follow RED -> GREEN -> REFACTOR where practical and end with `go test ./...`.
+5. Keep each task scoped to one feature folder.
+6. End every code task with the quality gate below.
 
-## Plan files
+## Plan Files
 
 | Order | File | Purpose |
 |---:|---|---|
-| 0 | [`00-structure-reset.md`](./00-structure-reset.md) | SCC-style module-first prerequisite phase and migration bridge |
-| 1 | [`00-backend-architecture.md`](./00-backend-architecture.md) | Current/target architecture, module contracts, dependency rules |
-| 2 | [`01-current-state-and-done-checklist.md`](./01-current-state-and-done-checklist.md) | Verified baseline, routes, partial refactor status, known gaps |
-| 3 | [`02-execution-backlog.md`](./02-execution-backlog.md) | Global ordered backlog with dependencies |
-| 4 | [`03-phase-a-test-and-architecture-hardening.md`](./03-phase-a-test-and-architecture-hardening.md) | Tests and architecture guardrails before moving more code |
-| 5 | [`04-phase-b-taskdaily-vertical-slice.md`](./04-phase-b-taskdaily-vertical-slice.md) | Complete TaskDaily hexagonal slice |
-| 6 | [`05-phase-c-monthly-plan-workflow.md`](./05-phase-c-monthly-plan-workflow.md) | Extract monthly plan/R2 workflow into module boundaries |
-| 7 | [`06-phase-d-dashboard-and-masterdata.md`](./06-phase-d-dashboard-and-masterdata.md) | Dashboard query services and master data module pattern |
-| 8 | [`07-phase-e-auth-user-deploy-hardening.md`](./07-phase-e-auth-user-deploy-hardening.md) | Auth/user safety, config, deploy, smoke checks |
-| 9 | [`99-agent-task-template.md`](./99-agent-task-template.md) | Copy/paste template for assigning one task to Codex/Claude/GLM |
+| 0 | [`00-structure-reset.md`](./00-structure-reset.md) | Hinghoi-style feature-first baseline and migration bridge |
+| 1 | [`00-backend-architecture.md`](./00-backend-architecture.md) | Target architecture and dependency rules |
+| 2 | [`01-current-state-and-done-checklist.md`](./01-current-state-and-done-checklist.md) | Verified status and known transitional code |
+| 3 | [`02-execution-backlog.md`](./02-execution-backlog.md) | Ordered backlog with dependencies |
+| 4 | [`03-phase-a-test-and-architecture-hardening.md`](./03-phase-a-test-and-architecture-hardening.md) | Guardrails and regression tests |
+| 5 | [`04-phase-b-taskdaily-vertical-slice.md`](./04-phase-b-taskdaily-vertical-slice.md) | Move TaskDaily fully into `internal/feature/task` |
+| 6 | [`05-phase-c-monthly-plan-workflow.md`](./05-phase-c-monthly-plan-workflow.md) | Move monthly plan workflow into `internal/feature/monthlyplan` |
+| 7 | [`06-phase-d-dashboard-and-masterdata.md`](./06-phase-d-dashboard-and-masterdata.md) | Move dashboard and master data into feature folders |
+| 8 | [`07-phase-e-auth-user-deploy-hardening.md`](./07-phase-e-auth-user-deploy-hardening.md) | Move auth/user and finish release hardening |
+| 9 | [`99-agent-task-template.md`](./99-agent-task-template.md) | Task assignment template |
 | 10 | [`release-checklist.md`](./release-checklist.md) | Release readiness checklist |
 | 11 | [`runbook.md`](./runbook.md) | Runtime, migration, rollback, and troubleshooting notes |
-| 12 | [`98-session-log-2026-04-28.md`](./98-session-log-2026-04-28.md) | This session's analysis and parallel-agent notes |
-| 13 | [`08-phase-a-wave-1-task-board.md`](./08-phase-a-wave-1-task-board.md) | Wave 1 agent split and execution board |
+| 12 | [`98-session-log-2026-04-28.md`](./98-session-log-2026-04-28.md) | Previous session notes |
+| 13 | [`08-phase-a-wave-1-task-board.md`](./08-phase-a-wave-1-task-board.md) | Historical Wave 1 board |
 
-## Phase progress
+## Phase Progress
 
-- ✅ **Phase 0** — Structure reset & module-first baseline
-- ⬜ **M1** — Safe foundation
-- ⬜ **M2** — TaskDaily module complete
-- ⬜ **M3** — Monthly plan workflow modularized
-- ⬜ **M4** — Dashboard and master data cleaned
-- ⬜ **M5** — Auth/user/release hardening
+- ✅ **Phase 0** — Hinghoi-style structure reset and TaskDaily pilot
+- ✅ **M1** — Safe foundation and test guardrails
+- ✅ **M2** — TaskDaily fully moved to `internal/feature/task`
+- ✅ **M3** — Monthly plan fully moved to `internal/feature/monthlyplan`
+- ✅ **M4** — Dashboard and master data route entrypoints plus business extraction are complete
+- ✅ **M5** — Auth/user route entrypoints, deploy hardening, and DB/server bridge updates completed; only release operational checklist remains
 
-## Structure rule (applies to ALL phases)
+## Current Recommendation
 
-> Every phase MUST follow the **module-first vertical-slice** layout defined in [`00-structure-reset.md`](./00-structure-reset.md). Each feature lives under `internal/modules/<module>/` with `controller.go`, `service.go`, `repository.go`, `repository_impl.go`, `dto.go`, `errors.go`, and `entity.go` as needed. The pilot at `internal/modules/task/` is the reference. Do **not** create new files under the legacy `internal/domain/`, `internal/app/`, `internal/port/`, or `internal/adapter/out/` paths — migrate into `internal/modules/` instead.
+Feature migration backlog is complete. Use [`release-checklist.md`](./release-checklist.md) and [`runbook.md`](./runbook.md) for pre-release validation and operational checks.
 
-## Immediate recommended next task
-
-Start with **M1** in [`02-execution-backlog.md`](./02-execution-backlog.md): test + architecture hardening on top of the new module-first baseline.
-
-## Quality gate for every phase
+## Quality Gate
 
 ```bash
 go test ./...
 go vet ./...
 go build -o /tmp/hotlines-api main.go
 ```
-
-Do not proceed to the next phase if these fail.

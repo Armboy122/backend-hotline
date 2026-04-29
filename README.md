@@ -32,7 +32,9 @@ backend-hotlines3/
 go mod tidy
 ```
 
-2. แก้ไขค่าใน `config.yaml`:
+2. สร้างไฟล์ `.env` จาก `.env.example` แล้วเติมค่า secrets ที่จำเป็น
+
+3. แก้ไขค่าใน `config.yaml` ถ้าต้องการปรับค่าเซิร์ฟเวอร์หรือฐานข้อมูล:
 ```yaml
 database:
   host: localhost
@@ -42,7 +44,7 @@ database:
   dbname: hotlines3
 ```
 
-3. รัน PostgreSQL:
+4. รัน PostgreSQL:
 ```bash
 # ตัวอย่างใช้ Docker
 docker run --name postgres-hotlines \
@@ -68,74 +70,74 @@ Server จะรันที่ `http://localhost:8080`
 ### Master Data APIs
 
 #### Operation Centers (ศูนย์ปฏิบัติการ)
-- `GET /api/operation-centers` - รายการทั้งหมด
-- `GET /api/operation-centers/:id` - ดูรายละเอียด
-- `POST /api/operation-centers` - สร้างใหม่
-- `PUT /api/operation-centers/:id` - แก้ไข
-- `DELETE /api/operation-centers/:id` - ลบ
+- `GET /v1/operation-centers` - รายการทั้งหมด
+- `GET /v1/operation-centers/:id` - ดูรายละเอียด
+- `POST /v1/operation-centers` - สร้างใหม่
+- `PUT /v1/operation-centers/:id` - แก้ไข
+- `DELETE /v1/operation-centers/:id` - ลบ
 
 #### PEAs (การไฟฟ้าส่วนภูมิภาค)
-- `GET /api/peas` - รายการทั้งหมด
-- `GET /api/peas/:id` - ดูรายละเอียด
-- `POST /api/peas` - สร้างใหม่
-- `POST /api/peas/bulk` - สร้างหลายรายการ
-- `PUT /api/peas/:id` - แก้ไข
-- `DELETE /api/peas/:id` - ลบ
+- `GET /v1/peas` - รายการทั้งหมด
+- `GET /v1/peas/:id` - ดูรายละเอียด
+- `POST /v1/peas` - สร้างใหม่
+- `POST /v1/peas/bulk` - สร้างหลายรายการ
+- `PUT /v1/peas/:id` - แก้ไข
+- `DELETE /v1/peas/:id` - ลบ
 
 #### Stations (สถานี)
-- `GET /api/stations` - รายการทั้งหมด
-- `GET /api/stations/:id` - ดูรายละเอียด
-- `POST /api/stations` - สร้างใหม่
-- `PUT /api/stations/:id` - แก้ไข
-- `DELETE /api/stations/:id` - ลบ
+- `GET /v1/stations` - รายการทั้งหมด
+- `GET /v1/stations/:id` - ดูรายละเอียด
+- `POST /v1/stations` - สร้างใหม่
+- `PUT /v1/stations/:id` - แก้ไข
+- `DELETE /v1/stations/:id` - ลบ
 
 #### Feeders (สายป้อน)
-- `GET /api/feeders` - รายการทั้งหมด
-- `GET /api/feeders/:id` - ดูรายละเอียด
-- `POST /api/feeders` - สร้างใหม่
-- `PUT /api/feeders/:id` - แก้ไข
-- `DELETE /api/feeders/:id` - ลบ
+- `GET /v1/feeders` - รายการทั้งหมด
+- `GET /v1/feeders/:id` - ดูรายละเอียด
+- `POST /v1/feeders` - สร้างใหม่
+- `PUT /v1/feeders/:id` - แก้ไข
+- `DELETE /v1/feeders/:id` - ลบ
 
 #### Job Types (ประเภทงาน)
-- `GET /api/job-types` - รายการทั้งหมด
-- `GET /api/job-types/:id` - ดูรายละเอียด
-- `POST /api/job-types` - สร้างใหม่
-- `PUT /api/job-types/:id` - แก้ไข
-- `DELETE /api/job-types/:id` - ลบ
+- `GET /v1/job-types` - รายการทั้งหมด
+- `GET /v1/job-types/:id` - ดูรายละเอียด
+- `POST /v1/job-types` - สร้างใหม่
+- `PUT /v1/job-types/:id` - แก้ไข
+- `DELETE /v1/job-types/:id` - ลบ
 
 #### Job Details (รายละเอียดงาน)
-- `GET /api/job-details` - รายการทั้งหมด
-- `GET /api/job-details/:id` - ดูรายละเอียด
-- `POST /api/job-details` - สร้างใหม่
-- `PUT /api/job-details/:id` - แก้ไข
-- `DELETE /api/job-details/:id` - ลบ
+- `GET /v1/job-details` - รายการทั้งหมด
+- `GET /v1/job-details/:id` - ดูรายละเอียด
+- `POST /v1/job-details` - สร้างใหม่
+- `PUT /v1/job-details/:id` - แก้ไข
+- `DELETE /v1/job-details/:id` - ลบ
 
 #### Teams (ทีมงาน)
-- `GET /api/teams` - รายการทั้งหมด
-- `GET /api/teams/:id` - ดูรายละเอียด
-- `POST /api/teams` - สร้างใหม่
-- `PUT /api/teams/:id` - แก้ไข
-- `DELETE /api/teams/:id` - ลบ
+- `GET /v1/teams` - รายการทั้งหมด
+- `GET /v1/teams/:id` - ดูรายละเอียด
+- `POST /v1/teams` - สร้างใหม่
+- `PUT /v1/teams/:id` - แก้ไข
+- `DELETE /v1/teams/:id` - ลบ
 
 ### Task Daily APIs (งานประจำวัน)
-- `GET /api/tasks` - รายการทั้งหมด (รองรับ query: year, month, teamId)
-- `GET /api/tasks/by-team` - รายการ grouped by team (query: year, month)
-- `GET /api/tasks/:id` - ดูรายละเอียด
-- `POST /api/tasks` - สร้างใหม่
-- `PUT /api/tasks/:id` - แก้ไข
-- `DELETE /api/tasks/:id` - ลบ
+- `GET /v1/tasks` - รายการทั้งหมด (รองรับ query: year, month, teamId)
+- `GET /v1/tasks/by-team` - รายการ grouped by team (query: year, month)
+- `GET /v1/tasks/:id` - ดูรายละเอียด
+- `POST /v1/tasks` - สร้างใหม่
+- `PUT /v1/tasks/:id` - แก้ไข
+- `DELETE /v1/tasks/:id` - ลบ
 
 ### Dashboard APIs
-- `GET /api/dashboard/summary` - สรุปภาพรวม
-- `GET /api/dashboard/top-jobs` - งานที่ทำบ่อยที่สุด
-- `GET /api/dashboard/top-feeders` - สายป้อนที่ทำงานบ่อยที่สุด
-- `GET /api/dashboard/stats` - สถิติต่างๆ สำหรับกราฟ
+- `GET /v1/dashboard/summary` - สรุปภาพรวม
+- `GET /v1/dashboard/top-jobs` - งานที่ทำบ่อยที่สุด
+- `GET /v1/dashboard/top-feeders` - สายป้อนที่ทำงานบ่อยที่สุด
+- `GET /v1/dashboard/stats` - สถิติต่างๆ สำหรับกราฟ
 
 ## ตัวอย่างการใช้งาน
 
 ### สร้าง Operation Center
 ```bash
-curl -X POST http://localhost:8080/api/operation-centers \
+curl -X POST http://localhost:8080/v1/operation-centers \
   -H "Content-Type: application/json" \
   -d '{
     "name": "ศูนย์ปฏิบัติการภาคเหนือ",
@@ -145,12 +147,12 @@ curl -X POST http://localhost:8080/api/operation-centers \
 
 ### ดูรายการ Teams
 ```bash
-curl http://localhost:8080/api/teams
+curl http://localhost:8080/v1/teams
 ```
 
 ### ดูงานตามเดือน
 ```bash
-curl "http://localhost:8080/api/tasks?year=2024&month=1"
+curl "http://localhost:8080/v1/tasks?year=2024&month=1"
 ```
 
 ## Configuration (Viper)

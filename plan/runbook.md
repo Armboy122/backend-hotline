@@ -69,7 +69,7 @@ Common settings to verify:
 
 ## Smoke command
 
-Once `scripts/smoke.sh` exists:
+`scripts/smoke.sh` now checks health, optional login, `/v1/auth/me`, `/v1/tasks`, `/v1/monthly-plans/:year/:month`, and dashboard summary.
 
 ```bash
 BASE_URL=http://localhost:8080 USERNAME=admin PASSWORD=secret scripts/smoke.sh

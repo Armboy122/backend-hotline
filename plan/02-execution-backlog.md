@@ -1,119 +1,135 @@
 # Execution Backlog
 
-> **Structure rule:** All work from Phase A (M1) onward MUST follow the module-first vertical-slice layout defined in [`00-structure-reset.md`](./00-structure-reset.md). New code lives under `internal/modules/<module>/` (`controller.go`, `service.go`, `repository.go`, `repository_impl.go`, `dto.go`, `errors.go`, `entity.go`). The legacy `internal/domain/`, `internal/app/`, `internal/port/`, `internal/adapter/out/`, and `internal/handlers/v1/` paths are migration sources only — every milestone below ends with the affected feature owned by `internal/modules/<module>/`.
+> **Structure rule:** new feature work belongs under `internal/feature/<feature>/...`, following the Hinghoi backend shape. Existing `internal/modules/*` code is transitional source only.
 
-## Dependency graph
+## Dependency Graph
 
 ```text
-0. Structure reset & module-first baseline             [DONE]
-  -> A. Test + architecture hardening                 [TODO]
-       -> B. TaskDaily vertical slice                 [TODO]
-            -> C. Monthly plan workflow               [TODO]
-                 -> D. Dashboard + master data pattern [TODO]
-                      -> E. Auth/user + deploy hardening [TODO]
+0. Hinghoi-style structure reset                  [DONE]
+  -> A. Test + architecture hardening             [DONE]
+       -> B. TaskDaily feature migration          [DONE]
+            -> C. Monthly plan feature migration  [DONE]
+                 -> D. Dashboard + master data    [DONE]
+                      -> E. Auth/user/release     [DONE]
 ```
 
-## Milestones
+## S0 - Hinghoi-Style Structure Reset [DONE]
 
-### S0 - Structure reset and module-first baseline [DONE]
-
-- [x] S0.1 update plan index and backlog so the reset is the first prerequisite
-- [x] S0.2 record the SCC-style preference in Obsidian
-- [x] S0.3 create the module-first task pilot under `internal/modules/task/`
-- [x] S0.4 wire `/v1/tasks` through the new module entrypoint
-- [x] S0.5 add boundary tests for the module-first shape
+- [x] S0.1 update plan index/backlog to make Hinghoi-style `internal/feature` canonical
+- [x] S0.2 document that `internal/modules` is deprecated transitional source
+- [x] S0.3 create TaskDaily pilot under `internal/feature/task`
+- [x] S0.4 wire `/v1/tasks` through `taskrepository -> taskservice -> taskcontroller`
+- [x] S0.5 update architecture tests for `internal/feature`
 
 Acceptance:
 
-- The repo now has a module-first wiring shell for TaskDaily.
-- Later phases can build on the new module shape instead of the old layer-first path.
-- `go test ./...` still passes.
+- `/v1/tasks*` routes are still compatible.
+- `internal/feature/task` has controller/service/repository/dto/entity/mapper packages.
+- `go test ./...`, `go vet ./...`, and `go build -o /tmp/hotlines-api main.go` pass.
 
-### M1 - Safe foundation [TODO]
+## M1 - Safe Foundation [DONE]
 
-- [ ] A1 architecture boundary tests
-- [ ] A2 config and middleware tests
-- [ ] A3 standard response/error mapping tests
-- [ ] A4 TaskDaily list behavior tests around current usecase
-- [ ] A5 smoke script skeleton for core `/v1` endpoints
+- [x] A1 architecture boundary tests
+- [x] A2 config and middleware tests
+- [x] A3 standard response/error mapping tests
+- [x] A4 TaskDaily list behavior tests around current usecase
+- [x] A5 smoke script skeleton for core `/v1` endpoints
 
-Acceptance:
+## M2 - TaskDaily Feature Migration [DONE]
 
-```bash
-go test ./...
-go vet ./...
-go build -o /tmp/hotlines-api main.go
-```
+Target home: `internal/feature/task/`.
 
-### M2 - TaskDaily module complete [TODO]
+- [x] B1 move TaskDaily HTTP parsing from `internal/handlers/v1/task.go` into `internal/feature/task/controller/v1.go`
+- [x] B2 move TaskDaily business behavior from `internal/app/task/usecase/*` and `internal/modules/task/*` into `internal/feature/task/service`
+- [x] B3 move TaskDaily persistence from `internal/adapter/out/persistence/gorm/task_repository.go` into `internal/feature/task/repository`
+- [x] B4 move TaskDaily DTO/entity aliases into owned `dto`, `entity`, and `mapper` code
+- [x] B5 retire TaskDaily imports from `internal/modules/task`, `internal/app/task`, `internal/port/outbound/repository/task_repository.go`, and `internal/handlers/v1/task.go`
 
-> Target home: `internal/modules/task/`. Any remaining logic in `internal/app/task/usecase/`, `internal/port/outbound/repository/task_repository.go`, `internal/adapter/out/persistence/gorm/task_repository.go`, and `internal/handlers/v1/task.go` must be folded into the module by the end of M2.
-
-- [ ] B1 `internal/modules/task/repository.go` interface covers get/create/update/delete/list-by-team/list-by-filter; `repository_impl.go` provides the GORM implementation
-- [ ] B2 `internal/modules/task/service.go` exposes get/create/update/delete usecases
-- [ ] B3 `internal/modules/task/controller.go` delegates all task endpoints to the service (router wires the module entrypoint only)
-- [ ] B4 task validation and date/ID parsing locked by tests inside `internal/modules/task/`
-- [ ] B5 response compatibility verified for nested team/job/feeder/station data via module-local DTOs
+Completed: 2026-04-29
 
 Acceptance:
 
 - Existing `/v1/tasks*` routes still work.
 - Pagination defaults remain `page=1`, `limit=50`, max `100`.
 - Soft delete behavior is preserved.
-- `go test ./...` passes.
+- Task feature tests live under `internal/feature/task/...`.
 
-### M3 - Monthly plan workflow modularized [TODO]
+## M3 - Monthly Plan Feature Migration [DONE]
 
-> Target home: `internal/modules/monthlyplan/`. Persistence and R2 storage are module-local adapters (`repository_impl.go` and a `storage_impl.go` or sibling file) so the monthly-plan flow lives in one folder.
+Target home: `internal/feature/monthlyplan/`.
 
-- [ ] C1 define monthly plan entities and errors inside `internal/modules/monthlyplan/entity.go` and `errors.go`
-- [ ] C2 define monthly plan repository/storage interfaces in `internal/modules/monthlyplan/repository.go`
-- [ ] C3 add settings and period usecases on `internal/modules/monthlyplan/service.go`
-- [ ] C4 add presign and confirm upload usecases on `internal/modules/monthlyplan/service.go` (R2 stays behind the module-local storage adapter)
-- [ ] C5 add list/status/download/delete/restore/hard-delete usecases on `internal/modules/monthlyplan/service.go`
-- [ ] C6 keep role/team policy tested inside `internal/modules/monthlyplan/`
+- [x] C1 create `controller`, `service`, `repository`, `dto`, `entity`, and `mapper` packages
+- [x] C2 move settings and period usecases into `service`
+- [x] C3 move presign and confirm upload usecases into `service`
+- [x] C4 move list/status/download/delete/restore/hard-delete behavior into `service`
+- [x] C5 move GORM persistence and R2 storage adapters behind `repository`
+- [x] C6 retire monthly-plan logic from `internal/modules/monthlyplan`, `internal/app/monthlyplan`, `internal/port`, `internal/adapter/out`, and `internal/handlers/v1/monthly_plan.go`
+
+Completed: 2026-04-29
 
 Acceptance:
 
 - Existing `/v1/monthly-plans*` routes remain compatible.
-- R2 details are behind a storage port.
-- Admin-only behavior remains enforced.
-- Non-admin team restrictions are tested.
+- R2 details are behind the feature repository/storage boundary.
+- Admin-only and team-scoped behavior remain tested.
 
-### M4 - Dashboard and master data cleaned [TODO]
+## M4 - Dashboard And Master Data [DONE]
 
-> Target homes: `internal/modules/dashboard/` and one `internal/modules/<masterdata>/` per master data resource (`jobtype`, `jobdetail`, `team`, `feeder`, `station`, `pea`, `operationcenter`). No new code in `internal/handlers/v1/` or `internal/adapter/out/persistence/gorm/` for these features — migrate into modules.
+Target homes:
 
-- [ ] D1 dashboard module under `internal/modules/dashboard/` with `repository.go`/`repository_impl.go` for queries and `service.go` for aggregations
-- [ ] D2 dashboard filter parsing tests inside `internal/modules/dashboard/`
-- [ ] D3 extract master data pattern for one representative module under `internal/modules/jobtype/`
-- [ ] D4 apply the same module-first pattern to remaining master data resources in small batches (`jobdetail`, `team`, `feeder`, `station`, `pea`, `operationcenter`)
-- [ ] D5 update README route documentation from `/api` to `/v1`
+- `internal/feature/dashboard/`
+- `internal/feature/jobtype/`
+- `internal/feature/jobdetail/`
+- `internal/feature/team/`
+- `internal/feature/feeder/`
+- `internal/feature/station/`
+- `internal/feature/pea/`
+- `internal/feature/operationcenter/`
+
+Tasks:
+
+- [x] D0 remove `internal/modules/dashboard` and `internal/modules/masterdata` route entrypoints
+- [x] D0.1 wire dashboard routes through `internal/feature/dashboard`
+- [x] D0.2 wire master data routes through `internal/feature/masterdata`
+- [x] D1 move dashboard aggregation queries into `internal/feature/dashboard/repository`
+- [x] D2 move dashboard orchestration into `internal/feature/dashboard/service`
+- [x] D3 move dashboard HTTP parsing/mapping into `internal/feature/dashboard/controller`
+- [x] D4 migrate `jobtype` first as the master data reference pattern
+- [x] D5 apply the pattern to `jobdetail`, `feeder`, `pea`, and `operationcenter`
+- [x] D6 update README route docs from `/api` to `/v1`
+
+Completed: 2026-04-29
 
 Acceptance:
 
 - Dashboard aggregation responses remain compatible.
 - Master data CRUD behavior remains compatible.
-- Handler direct GORM usage is reduced without broad generic abstractions.
+- Direct business GORM usage is removed from legacy handlers for migrated features.
 
-### M5 - Auth/user/release hardening [TODO]
+## M5 - Auth/User/Server/Deploy Hardening [DONE]
 
-> Target homes: `internal/modules/auth/` and `internal/modules/user/`. Direct GORM/JWT calls in `internal/handlers/v1/auth.go` and `internal/handlers/v1/user.go` move into the module's `service.go` and `repository_impl.go`.
+Target homes:
 
-- [ ] E1 `internal/modules/auth/service.go` tests for login/refresh/me/logout
-- [ ] E2 `internal/modules/user/service.go` tests for CRUD/change password
-- [ ] E3 replace direct auth/user GORM logic with module services (delete old layer-first files once migrated)
-- [ ] E4 production config validation and `.env.example` review
-- [ ] E5 Docker/build/runbook/release checklist verified
-- [ ] E6 smoke script runs a representative auth/task/monthly-plan/dashboard path
+- `internal/feature/auth/`
+- `internal/feature/user/`
+- later: `internal/server/hotline_server/`
+- later: `pkg/db/`
+
+Tasks:
+
+- [x] E0 wire auth and user routes through `internal/feature/auth` and `internal/feature/user` entrypoints
+- [x] E1 move login/refresh/logout/me into `internal/feature/auth`
+- [x] E2 move user CRUD/change password into `internal/feature/user`
+- [x] E3 review production config validation and `.env.example`
+- [x] E4 move server/router composition toward `internal/server/hotline_server`
+- [x] E5 evaluate moving DB models/connections toward `pkg/db` after feature migration is stable
+- [x] E6 verify Docker/build/runbook/release checklist and smoke script
+
+Completed: 2026-04-29
 
 Acceptance:
 
 - Password hashes are never exposed.
-- Login updates `lastLogin` without `Save()` full-row side effects.
+- Login updates `lastLogin` without full-row side effects.
 - Admin-only user management remains enforced.
 - Release checklist is usable by another agent.
-
-## Agent dispatch rule
-
-Each unchecked checkbox above maps to one task assignment. Do not assign a whole milestone to one agent. Use [`99-agent-task-template.md`](./99-agent-task-template.md).

@@ -7,8 +7,8 @@ import (
 	"log"
 
 	"backend-hotlines3/internal/config"
-	"backend-hotlines3/internal/database"
 	"backend-hotlines3/internal/models"
+	dbpkg "backend-hotlines3/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -23,7 +23,7 @@ func main() {
 	}
 
 	// เชื่อมต่อ database (ไม่ auto migrate)
-	db, err := database.Connect(ctx, cfg)
+	db, err := dbpkg.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect database: %v", err)
 	}

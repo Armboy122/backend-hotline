@@ -1,5 +1,5 @@
-// Package architecture_test contains static boundary checks that enforce
-// layering rules defined in plan/00-backend-architecture.md.
+// Package architecture_test contains static boundary checks that enforce the
+// Hinghoi-style feature-first rules defined in plan/00-backend-architecture.md.
 //
 // These tests do NOT connect to any database or start any server.
 // They inspect Go source files directly via go/parser.
@@ -78,24 +78,29 @@ func rel(root, path string) string {
 
 // ─── A1.1 ────────────────────────────────────────────────────────────────────
 
-// TestUsecasesDoNotImportGin verifies that no production file under
-// internal/app imports github.com/gin-gonic/gin.
-// Usecases must be transport-agnostic so they can be called from HTTP,
+// TestUsecasesDoNotImportGin verifies that no production usecase/service file
+// imports github.com/gin-gonic/gin.
+// Usecases and services must be transport-agnostic so they can be called from HTTP,
 // gRPC, CLI, or tests without a real HTTP context.
 func TestUsecasesDoNotImportGin(t *testing.T) {
 	root := projectRoot(t)
 	files := goSourceFiles(t, root, "internal/app")
+	files = append(files, goSourceFiles(t, root, "internal/feature")...)
 	if len(files) == 0 {
-		t.Skip("internal/app has no source files yet")
+		t.Skip("no usecase/service source files yet")
 	}
 
 	for _, f := range files {
+		if !strings.Contains(f, string(filepath.Separator)+"service"+string(filepath.Separator)) &&
+			!strings.Contains(f, string(filepath.Separator)+"usecase"+string(filepath.Separator)) {
+			continue
+		}
 		for _, imp := range importsOf(t, f) {
 			if strings.Contains(imp, "gin-gonic/gin") {
 				t.Errorf(
-					"BOUNDARY VIOLATION: usecase file %q imports Gin.\n"+
-						"  Usecases must not depend on HTTP transport packages.\n"+
-						"  Move Gin-specific logic to the handler layer.",
+					"BOUNDARY VIOLATION: service/usecase file %q imports Gin.\n"+
+						"  Services and usecases must not depend on HTTP transport packages.\n"+
+						"  Move Gin-specific logic to the controller layer.",
 					rel(root, f),
 				)
 			}
@@ -117,8 +122,8 @@ func TestDomainDoesNotImportFrameworks(t *testing.T) {
 	}
 
 	forbidden := []struct {
-		substr  string
-		reason  string
+		substr string
+		reason string
 	}{
 		{"gin-gonic/gin", "HTTP framework"},
 		{"gorm.io/gorm", "ORM / persistence"},

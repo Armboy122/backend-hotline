@@ -1,128 +1,71 @@
-# Phase E - Auth, User, and Deploy Hardening
-
-> **Structure rule:** All code in this phase MUST follow the module-first vertical-slice layout defined in [`00-structure-reset.md`](./00-structure-reset.md). Each module lives under `internal/modules/<module>/` with `controller.go`, `service.go`, `repository.go`, `repository_impl.go`, `dto.go`, `errors.go`, and `entity.go` as needed. The pilot at `internal/modules/task/` is the reference. Do **not** create new files under `internal/domain/`, `internal/app/`, `internal/port/`, or `internal/adapter/out/` — put auth under `internal/modules/auth/` and user under `internal/modules/user/`.
+# Phase E - Auth, User, Server, And Deploy Hardening
 
 ## Goal
 
-Refactor security-sensitive auth/user behavior after core operational modules are stable, then finish release/deploy readiness.
+Move security-sensitive auth/user behavior into Hinghoi-style feature folders, then finish runtime/deploy readiness.
 
-## E1 - Auth module
+## Auth Target
 
-**Objective:** Move login/refresh/logout/me behavior out of direct handler/GORM code.
+```text
+internal/feature/auth/controller/
+internal/feature/auth/service/
+internal/feature/auth/repository/
+internal/feature/auth/dto/
+internal/feature/auth/entity/
+internal/feature/auth/mapper/
+```
 
-**Files:**
+Tasks:
 
-- Create: `internal/modules/auth/controller.go`
-- Create: `internal/modules/auth/service.go`
-- Create: `internal/modules/auth/repository.go`
-- Create: `internal/modules/auth/repository_impl.go`
-- Create: `internal/modules/auth/dto.go`
-- Create: `internal/modules/auth/errors.go`
-- Create: `internal/modules/auth/entity.go`
-- Retire or thin: `internal/handlers/v1/auth.go` once module is routed
+- [x] Create `internal/feature/auth` entrypoint packages
+- [x] Wire auth routes through `internal/feature/auth`
+- [x] Login rejects empty username/password
+- [x] Login rejects inactive users
+- [x] Password verification uses the existing password/crypto package boundary
+- [x] JWT generation stays behind a token/JWT dependency
+- [x] `lastLogin` update uses a field-specific update
+- [x] Refresh/logout/me behavior remains compatible
+- [x] Responses never expose password hashes
 
-**Task cards:**
+## User Target
 
-### E1.1 Login
+```text
+internal/feature/user/controller/
+internal/feature/user/service/
+internal/feature/user/repository/
+internal/feature/user/dto/
+internal/feature/user/entity/
+internal/feature/user/mapper/
+```
 
-- [ ] Reject empty username/password
-- [ ] Reject inactive user
-- [ ] Verify bcrypt through password port or existing package seam
-- [ ] Generate JWT using `pkg/jwt`
-- [ ] Update `lastLogin` with field-specific update, not full `Save()`
-- [ ] Response excludes password hash
+Tasks:
 
-### E1.2 Refresh/logout
+- [x] Create `internal/feature/user` entrypoint packages
+- [x] Wire user routes through `internal/feature/user`
+- [x] Move user list/get/create/update/delete into feature packages
+- [x] Move change password behavior into service
+- [x] Preserve admin-only middleware behavior
+- [x] Prevent password overwrite during ordinary update
 
-- [ ] Preserve current refresh behavior
-- [ ] Preserve logout behavior
-- [ ] Invalid token maps to 401
+## Server And Runtime Target
 
-### E1.3 Me
+Later, after feature migration is stable:
 
-- [ ] Reads actor from auth context
-- [ ] Returns current user shape
-- [ ] Inactive/missing user behavior is tested
+```text
+internal/server/hotline_server/
+pkg/db/
+```
 
-## E2 - User module
+Tasks:
 
-**Objective:** Move user management and change password behavior into module services.
+- [x] Move router/server composition toward `internal/server/hotline_server`
+- [x] Review whether DB connection/models should move toward `pkg/db`
+- [x] Add production config validation
+- [x] Review `.env.example`
+- [x] Verify Dockerfile/build/runbook/release checklist
+- [x] Expand smoke script for auth/task/monthly-plan/dashboard flows
 
-**Files:**
-
-- Create: `internal/modules/user/controller.go`
-- Create: `internal/modules/user/service.go`
-- Create: `internal/modules/user/repository.go`
-- Create: `internal/modules/user/repository_impl.go`
-- Create: `internal/modules/user/dto.go`
-- Create: `internal/modules/user/errors.go`
-- Create: `internal/modules/user/entity.go`
-- Retire or thin: `internal/handlers/v1/user.go` once module is routed
-
-**Task cards:**
-
-- [ ] List users with pagination if product decides to add it; otherwise document current full-list behavior
-- [ ] Get user by id
-- [ ] Create user validates username/password/role/team
-- [ ] Update user does not overwrite password accidentally
-- [ ] Delete/deactivate behavior preserved
-- [ ] Change password requires current password unless current behavior says otherwise
-- [ ] Admin-only behavior remains enforced at route/middleware level
-
-## E3 - Production config validation
-
-**Objective:** Prevent unsafe runtime defaults in production.
-
-**Files:**
-
-- Modify: `internal/config/config.go`
-- Modify: `.env.example`
-- Create/modify: `internal/config/config_test.go`
-
-**Task cards:**
-
-- [ ] Require strong JWT secret in production mode
-- [ ] Require database config in production mode
-- [ ] Require R2 config if upload/monthly-plan routes are enabled
-- [ ] Make CORS wildcard invalid in production unless explicitly allowed
-- [ ] Document all variables in `.env.example`
-
-## E4 - Build/deploy assets
-
-**Objective:** Make another agent or developer able to build/run consistently.
-
-**Files:**
-
-- Create or update: `Dockerfile`
-- Create if desired: `docker-compose.yml`
-- Create: `scripts/smoke.sh` if not completed in Phase A
-- Modify: `README.md`
-- Update: `plan/runbook.md`
-
-**Task cards:**
-
-- [ ] Confirm Dockerfile builds `main.go`
-- [ ] Confirm container can receive config/env
-- [ ] Confirm health endpoint works locally
-- [ ] Smoke script supports `BASE_URL`, `USERNAME`, `PASSWORD`
-
-## E5 - Final architecture cleanup
-
-**Objective:** Remove stale partial patterns and confirm dependency direction.
-
-**Files:**
-
-- Modify only as needed across `internal/`
-
-**Task cards:**
-
-- [ ] No new direct business GORM in migrated controllers
-- [ ] Service packages do not import Gin
-- [ ] Entity/error packages do not import GORM/Gin/Viper/AWS
-- [ ] Repository interfaces return domain entities/results
-- [ ] README describes the module-first structure
-
-## Phase E acceptance
+## Acceptance
 
 ```bash
 go test ./...

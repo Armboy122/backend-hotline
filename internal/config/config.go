@@ -2,9 +2,11 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 	"github.com/subosito/gotenv"
@@ -105,7 +107,85 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 	}
 	config.CORS.AllowedOrigins = expanded
 
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
 	return &config, nil
+}
+
+// Validate checks that required config values are present and well-formed.
+func (c *Config) Validate() error {
+	var errs []error
+
+	if c.Server.Port <= 0 || c.Server.Port > 65535 {
+		errs = append(errs, fmt.Errorf("server.port must be between 1 and 65535"))
+	}
+	switch strings.ToLower(strings.TrimSpace(c.Server.Mode)) {
+	case "debug", "release", "test":
+	default:
+		errs = append(errs, fmt.Errorf("server.mode must be debug, release, or test"))
+	}
+
+	if strings.TrimSpace(c.Database.Host) == "" {
+		errs = append(errs, fmt.Errorf("database.host is required"))
+	}
+	if c.Database.Port <= 0 || c.Database.Port > 65535 {
+		errs = append(errs, fmt.Errorf("database.port must be between 1 and 65535"))
+	}
+	if strings.TrimSpace(c.Database.User) == "" {
+		errs = append(errs, fmt.Errorf("database.user is required"))
+	}
+	if strings.TrimSpace(c.Database.Password) == "" {
+		errs = append(errs, fmt.Errorf("database.password is required"))
+	}
+	if strings.TrimSpace(c.Database.DBName) == "" {
+		errs = append(errs, fmt.Errorf("database.dbname is required"))
+	}
+	if strings.TrimSpace(c.Database.SSLMode) == "" {
+		errs = append(errs, fmt.Errorf("database.sslmode is required"))
+	}
+	if strings.TrimSpace(c.Database.TimeZone) == "" {
+		errs = append(errs, fmt.Errorf("database.timezone is required"))
+	}
+
+	if strings.TrimSpace(c.Cloudflare.R2.AccountID) == "" {
+		errs = append(errs, fmt.Errorf("cloudflare.r2.account_id is required"))
+	}
+	if strings.TrimSpace(c.Cloudflare.R2.AccessKeyID) == "" {
+		errs = append(errs, fmt.Errorf("cloudflare.r2.access_key_id is required"))
+	}
+	if strings.TrimSpace(c.Cloudflare.R2.SecretAccessKey) == "" {
+		errs = append(errs, fmt.Errorf("cloudflare.r2.secret_access_key is required"))
+	}
+	if strings.TrimSpace(c.Cloudflare.R2.BucketName) == "" {
+		errs = append(errs, fmt.Errorf("cloudflare.r2.bucket_name is required"))
+	}
+	if strings.TrimSpace(c.Cloudflare.R2.PublicURL) == "" {
+		errs = append(errs, fmt.Errorf("cloudflare.r2.public_url is required"))
+	}
+
+	if strings.TrimSpace(c.JWT.Secret) == "" {
+		errs = append(errs, fmt.Errorf("jwt.secret is required"))
+	}
+	if _, err := time.ParseDuration(c.JWT.AccessTokenExpiry); err != nil {
+		errs = append(errs, fmt.Errorf("jwt.access_token_expiry must be a valid duration: %w", err))
+	}
+	if _, err := time.ParseDuration(c.JWT.RefreshTokenExpiry); err != nil {
+		errs = append(errs, fmt.Errorf("jwt.refresh_token_expiry must be a valid duration: %w", err))
+	}
+
+	if len(c.CORS.AllowedOrigins) == 0 {
+		errs = append(errs, fmt.Errorf("cors.allowed_origins must include at least one origin"))
+	}
+	if len(c.CORS.AllowedMethods) == 0 {
+		errs = append(errs, fmt.Errorf("cors.allowed_methods must include at least one method"))
+	}
+	if len(c.CORS.AllowedHeaders) == 0 {
+		errs = append(errs, fmt.Errorf("cors.allowed_headers must include at least one header"))
+	}
+
+	return errors.Join(errs...)
 }
 
 // expandEnv แทนที่ ${VAR_NAME} ด้วยค่าจาก environment variable

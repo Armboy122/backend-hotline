@@ -7,6 +7,8 @@ BASE_URL="${BASE_URL:-http://localhost:8081}"
 USERNAME="${USERNAME:-}"
 PASSWORD="${PASSWORD:-}"
 TOKEN=""
+CURRENT_YEAR="$(date +%Y)"
+CURRENT_MONTH="$(date +%m)"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
@@ -29,6 +31,16 @@ else
   echo "  ⏭️  skipping login (USERNAME/PASSWORD not set)"
 fi
 
+# ── GET /v1/auth/me ──────────────────────────────────────────────────────────
+if [[ -n "$TOKEN" ]]; then
+  echo "→ GET ${BASE_URL}/v1/auth/me"
+  ME_STATUS=$(curl -sf -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Bearer ${TOKEN}" \
+    "${BASE_URL}/v1/auth/me" 2>/dev/null) || ME_STATUS="000"
+  [[ "$ME_STATUS" =~ ^2..$ ]] || fail "/v1/auth/me returned $ME_STATUS"
+  echo "  ✅ /v1/auth/me → $ME_STATUS"
+fi
+
 # ── GET /v1/tasks ─────────────────────────────────────────────────────────────
 echo "→ GET ${BASE_URL}/v1/tasks?page=1&limit=1"
 if [[ -n "$TOKEN" ]]; then
@@ -45,6 +57,16 @@ elif [[ "$TASKS_STATUS" =~ ^2..$ ]]; then
   echo "  ✅ /v1/tasks → $TASKS_STATUS"
 else
   fail "/v1/tasks returned $TASKS_STATUS"
+fi
+
+# ── GET /v1/monthly-plans/:year/:month (authenticated) ───────────────────────
+if [[ -n "$TOKEN" ]]; then
+  echo "→ GET ${BASE_URL}/v1/monthly-plans/${CURRENT_YEAR}/${CURRENT_MONTH}"
+  MONTHLY_STATUS=$(curl -sf -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Bearer ${TOKEN}" \
+    "${BASE_URL}/v1/monthly-plans/${CURRENT_YEAR}/${CURRENT_MONTH}" 2>/dev/null) || MONTHLY_STATUS="000"
+  [[ "$MONTHLY_STATUS" =~ ^2..$ ]] || fail "/v1/monthly-plans/${CURRENT_YEAR}/${CURRENT_MONTH} returned $MONTHLY_STATUS"
+  echo "  ✅ /v1/monthly-plans/${CURRENT_YEAR}/${CURRENT_MONTH} → $MONTHLY_STATUS"
 fi
 
 # ── GET /v1/dashboard/summary (optional) ─────────────────────────────────────

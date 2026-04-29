@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"backend-hotlines3/internal/config"
-	"backend-hotlines3/internal/database"
-	"backend-hotlines3/internal/router"
+	hotlineserver "backend-hotlines3/internal/server/hotline_server"
+	dbpkg "backend-hotlines3/pkg/db"
 	"backend-hotlines3/pkg/jwt"
 
 	"github.com/gin-gonic/gin"
@@ -35,7 +35,7 @@ func main() {
 
 	// เชื่อมต่อ database
 	log.Println("Connecting to database...")
-	db, err := database.Connect(ctx, cfg)
+	db, err := dbpkg.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect database: %v", err)
 	}
@@ -44,7 +44,7 @@ func main() {
 	// Auto migrate models (เฉพาะเมื่อ auto_migrate: true ใน config)
 	if cfg.Database.AutoMigrate {
 		log.Println("Running AutoMigrate...")
-		if err := database.AutoMigrate(ctx, db); err != nil {
+		if err := dbpkg.AutoMigrate(ctx, db); err != nil {
 			log.Fatalf("Failed to migrate database: %v", err)
 		}
 		log.Println("AutoMigrate completed")
@@ -62,8 +62,8 @@ func main() {
 
 	jwtManager := jwt.NewJWTManager(cfg.JWT.Secret, accessTokenExpiry, refreshTokenExpiry)
 
-	// สร้าง router
-	r := router.SetupRouter(cfg, db, jwtManager)
+	// สร้าง router ผ่าน server entrypoint
+	r := hotlineserver.New(cfg, db, jwtManager)
 
 	// Cloud Run injects PORT env var — honour it; fall back to config
 	port := cfg.Server.Port

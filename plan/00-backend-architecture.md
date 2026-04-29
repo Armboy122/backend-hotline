@@ -2,9 +2,9 @@
 
 ## Goal
 
-Move `backend-hotline` from handler-heavy Gin/GORM code toward a modular, testable backend without breaking existing `/v1` API behavior. The refactor must preserve response shapes, filters, role behavior, and Cloudflare R2 upload flows.
+Move `backend-hotline` to a Hinghoi-style feature-first backend without breaking current `/v1` API behavior. Preserve response shapes, filters, role behavior, and Cloudflare R2 upload flows.
 
-## Current stack
+## Current Stack
 
 - Go 1.24
 - Gin HTTP router
@@ -12,161 +12,145 @@ Move `backend-hotline` from handler-heavy Gin/GORM code toward a modular, testab
 - Viper + `config.yaml`
 - JWT auth
 - Cloudflare R2/S3-compatible presigned URLs
-- Middleware for recovery, timeout, rate limit, gzip, cache headers, and CORS
+- Recovery, timeout, rate limit, gzip, cache header, and CORS middleware
 
-## Current repository shape
+## Current Repository Shape
+
+The repo is still mixed:
 
 ```text
 main.go
-cmd/
-  migrate/
-  fix-schema/
-  fix-workdate/
-  lowercase-columns/
-  rename-column/
-  test-read/
-internal/
-  adapter/out/persistence/gorm/task_repository.go
-  app/task/usecase/list_tasks.go
-  config/
-  database/
-  domain/task/entity.go
-  dto/response.go
-  handlers/v1/
-  middleware/
-  models/
-  port/outbound/repository/task_repository.go
-  router/router.go
-pkg/
-  jwt/
-  password/
-  s3/
+internal/router/
+internal/handlers/v1/
+internal/modules/                  # deprecated transitional source
+internal/domain/                   # legacy source during migration
+internal/app/                      # legacy source during migration
+internal/port/
+internal/adapter/out/
+internal/models/
+internal/database/
+pkg/jwt/
+pkg/password/
+pkg/s3/
 ```
 
-## Target repository shape
+## Target Repository Shape
 
-Use module/vertical-slice structure incrementally. Do not big-bang move the whole repo.
+Use the Hinghoi pattern:
 
 ```text
-internal/
-  domain/
-    task/
-    monthlyplan/
-    user/
-    masterdata/
-  app/
-    task/usecase/
-    monthlyplan/usecase/
-    dashboard/query/
-    masterdata/usecase/
-    user/usecase/
-    auth/usecase/
-  port/
-    inbound/http/v1/          optional final home for handlers
-    outbound/repository/
-    outbound/storage/
-  adapter/
-    out/persistence/gorm/
-    out/storage/r2/
-  handlers/v1/                allowed during migration
-  router/
+internal/feature/<feature>/
+  controller/
+    initiator.go
+    v1.go
+  service/
+    initiator.go
+    v1.go
+  repository/
+    initiator.go
+    v1.go
+  dto/
+    dto.go
+  entity/
+    entity.go
+  mapper/
+    mapper.go
+  helper/                 # optional
+  constant/               # optional
+
+internal/server/hotline_server/    # later phase
+  server.go
+  gin.go
+
+pkg/db/                            # later phase
+  db.go
+  postgres.go
   models/
+  migrations/
 ```
 
-## Layering rules
+## Dependency Rules
 
-### Allowed
+Allowed:
 
 ```text
-router.SetupRouter -> handlers/controllers
-handler/controller -> usecase/service interface
-usecase/service    -> repository/storage interfaces + domain models
-repository_impl    -> GORM models and SQL details
-storage_impl       -> R2/S3 client details
+router/server -> feature controllers
+controller    -> service interface + HTTP DTO mapping
+service       -> repository interface + feature entity/policy
+repository    -> GORM models, SQL details, storage clients
+mapper        -> entity/DTO/model conversion
 ```
 
-### Forbidden
+Forbidden:
 
 ```text
 new business rules in internal/router
-new direct GORM queries in handlers once that endpoint has a usecase
-usecase/service imports github.com/gin-gonic/gin
-domain imports GORM, Gin, Viper, or AWS SDK
-adapter/out imports handlers
-repository interfaces return GORM models
+new feature code in internal/modules
+new feature code in internal/domain/internal/app/internal/port/internal/adapter/out
+service imports github.com/gin-gonic/gin
+service imports gorm.io/gorm
+controller imports gorm.io/gorm or internal/models
+dto/entity/mapper imports Gin, GORM, Viper, or AWS SDK
+repository interfaces return raw persistence models as API DTOs
 ```
 
-## Module file contract
+Phase 0 exception:
 
-Each migrated domain should converge on:
+- `internal/feature/task/controller` may delegate to the legacy `v1.TaskHandler` until M2 retires that bridge.
+- Existing `internal/modules/*` and legacy layer-first packages may remain as migration sources.
 
-```text
-domain/<name>/entity.go
-domain/<name>/errors.go
-app/<name>/usecase/*.go
-port/outbound/repository/<name>_repository.go
-adapter/out/persistence/gorm/<name>_repository.go
-handlers/v1/<name>.go
-```
+## Feature Ownership
 
-Optional:
-
-```text
-domain/<name>/policy.go
-app/<name>/usecase/*_test.go
-adapter/out/storage/r2/*.go
-adapter/out/persistence/gorm/*_test.go
-handlers/v1/*_test.go
-```
-
-## Data ownership
-
-| Data | Owner |
+| Data / Flow | Target Feature |
 |---|---|
-| users/auth/session claims | `auth` and `user` |
-| operation_centers, peas, stations, feeders | `masterdata` |
-| teams | `team` or `masterdata/team` |
-| job_types, job_details | `workcatalog` or `masterdata/job` |
-| task_dailies | `task` |
-| monthly_plans, monthly_plan_settings, plan_files, file_size_logs | `monthlyplan` |
-| dashboard aggregates | `dashboard` query/read model |
-| R2 object operations | `storage` adapter behind port |
+| auth/login/refresh/me/logout | `internal/feature/auth` |
+| user management | `internal/feature/user` |
+| operation centers | `internal/feature/operationcenter` |
+| PEAs | `internal/feature/pea` |
+| stations | `internal/feature/station` |
+| feeders | `internal/feature/feeder` |
+| teams | `internal/feature/team` |
+| job types | `internal/feature/jobtype` |
+| job details | `internal/feature/jobdetail` |
+| task_dailies | `internal/feature/task` |
+| monthly plan settings/files/status | `internal/feature/monthlyplan` |
+| dashboard aggregates | `internal/feature/dashboard` |
+| upload/R2 generic flow | `internal/feature/upload` or shared pkg adapter after review |
 
-## Domain rules
-
-- `TaskDaily` is the main operational work record.
-- Task list endpoints must keep pagination default `page=1`, `limit=50`, max `100`.
-- Task filters must remain compatible with existing query names: `workDate`, `teamId`, `jobTypeId`, `feederId`, plus legacy/year-month endpoints.
-- Monthly plan flow must keep presign and confirm as separate steps.
-- Non-admin users must only access monthly plan files permitted by their team/role.
-- Admin can manage settings, restore files, and hard delete files.
-- Dashboard is read-model heavy; prefer query services over a thick domain model.
-- Password hashes must never be exposed in responses.
-
-## State transition architecture
+## Request Flow
 
 ```text
 HTTP request
-  -> handler parses path/query/body/auth context
-  -> usecase validates input and role/team policy
-  -> repository transaction reads/writes GORM models
-  -> storage adapter signs or deletes R2 object when needed
-  -> usecase returns domain/result DTO
-  -> handler returns existing standard response envelope
+  -> controller parses path/query/body/auth context
+  -> service validates input and role/team policy
+  -> repository reads/writes GORM models and storage clients
+  -> mapper converts model/entity/DTO shapes
+  -> controller returns existing standard response envelope
 ```
 
-## Testing strategy
+## Domain Rules To Preserve
 
-- Usecase tests use fake repositories/storage.
-- Handler tests use fake usecases and `httptest`.
-- Repository tests use a real or sqlite-compatible DB strategy only where practical.
+- `TaskDaily` pagination defaults stay `page=1`, `limit=50`, max `100`.
+- Task filters keep query names: `workDate`, `teamId`, `jobTypeId`, `feederId`, plus existing year/month endpoints.
+- Monthly plan presign and confirm remain separate steps.
+- Non-admin users only access monthly plan files permitted by role/team.
+- Admin can manage settings, restore files, and hard delete files.
+- Dashboard stays read-model heavy; prefer repository query methods plus service orchestration.
+- Password hashes must never be exposed.
+
+## Testing Strategy
+
+- Service tests use fake repositories/storage.
+- Controller tests use fake services and `httptest`.
+- Repository tests use real DB setup only for risky SQL behavior.
 - Architecture tests inspect imports/source for boundary violations.
-- Smoke tests verify core `/v1` flows after each major phase.
+- Smoke tests verify representative `/v1` flows after each major phase.
 
-## Migration/refactor rules
+## Migration Rules
 
-- Preserve public `/v1` routes unless an explicit compatibility plan exists.
-- Keep response envelopes compatible with `dto.StandardResponse`.
-- Do not rename DB columns during architecture refactor tasks.
-- Do not drop tables/columns without a separate migration and recovery plan.
-- When replacing handler logic with a usecase, keep the old endpoint behavior covered by tests first.
+- Preserve public `/v1` routes unless a separate compatibility plan exists.
+- Keep `dto.StandardResponse` response envelope compatible.
+- Do not rename DB columns during architecture-only refactors.
+- Do not drop tables/columns without a separate migration and rollback plan.
+- Move one feature at a time.
+- Retire the old source only after the matching feature is green and routed through `internal/feature`.

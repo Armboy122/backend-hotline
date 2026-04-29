@@ -6,7 +6,9 @@
 - Module: `backend-hotlines3`
 - Current API prefix: `/v1`
 - Stack: Go 1.24, Gin, GORM/PostgreSQL, Viper, JWT, R2/S3 client
-- Snapshot date: 2026-04-28
+- Snapshot date: 2026-04-29
+- Current architecture target: Hinghoi-style feature-first packages under `internal/feature/<feature>/...`
+- Deprecated transitional source: `internal/modules/*`, `internal/domain/*`, `internal/app/*`, `internal/port/*`, `internal/adapter/out/*`, `internal/handlers/v1/*`
 - Plan source docs:
   - `/Users/sakdithat/Downloads/hotline_prd.md`
   - `/Users/sakdithat/Downloads/hotline_domain_map.md`
@@ -125,50 +127,61 @@ PUT    /v1/users/:id/password
 - [x] CORS middleware exists
 - [x] Health endpoint exists
 
-### Partial architecture refactor
+### Hinghoi-style Phase 0
 
-- [x] `TaskDaily` has a domain entity
-- [x] `TaskDaily` has an outbound repository interface
-- [x] `TaskDaily` has a GORM repository implementation for list
-- [x] `TaskDaily` has a list usecase
-- [x] `TaskHandler.List` uses the task list usecase
-- [ ] `TaskHandler.GetByID` uses a usecase
-- [ ] `TaskHandler.Create` uses a usecase
-- [ ] `TaskHandler.Update` uses a usecase
-- [ ] `TaskHandler.Delete` uses a usecase
-- [ ] `TaskHandler.ListByTeam` uses a usecase/query service
-- [x] `TaskHandler.List` delegates to `ListTasksUseCase` via port interface
-- [x] `TaskHandler.GetByID` delegates to `GetTaskUseCase`
-- [x] `TaskHandler.Create` delegates to `CreateTaskUseCase`
-- [x] `TaskHandler.Update` delegates to `UpdateTaskUseCase`
-- [x] `TaskHandler.Delete` delegates to `DeleteTaskUseCase`
-- [x] `TaskHandler.ListByTeam` delegates to `ListTasksByTeamUseCase`
-- [x] `TaskHandler.ListByFilter` uses a usecase/query service
+- [x] Plan set now names `internal/feature/<feature>/...` as canonical
+- [x] `internal/modules` direction is deprecated in the plan
+- [x] `internal/feature/task/controller` exists
+- [x] `internal/feature/task/service` exists
+- [x] `internal/feature/task/repository` exists
+- [x] `internal/feature/task/dto` exists
+- [x] `internal/feature/task/entity` exists
+- [x] `internal/feature/task/mapper` exists
+- [x] `/v1/tasks*` routes are wired through the task feature entrypoint
+- [x] Architecture tests guard `internal/feature`
 
-### Handler-heavy areas
+### Transitional completed work
 
-- [ ] Auth handler still directly uses GORM
-- [ ] User handler still directly uses GORM
-- [ ] Monthly plan handler still directly uses GORM and R2 client
-- [ ] Dashboard handler still directly uses GORM aggregation queries
-- [ ] Master data handlers still directly use GORM
-- [ ] Upload handler directly owns R2 flow
+- [x] TaskDaily is fully routed and implemented under `internal/feature/task`
+- [x] TaskDaily legacy handler/usecase/port/adapter/domain/module files were retired
+- [x] Monthly plan is fully routed and implemented under `internal/feature/monthlyplan`
+- [x] Monthly plan legacy handler/usecase/port/adapter/domain/module files were retired
+- [x] R2 monthly plan storage is behind the feature repository/storage boundary
+- [x] `internal/modules/dashboard` and `internal/modules/masterdata` entrypoint wrappers were retired
+- [x] Dashboard routes are wired through `internal/feature/dashboard`
+- [x] Master data routes are wired through `internal/feature/masterdata`
+- [x] `/v1/job-types` is fully routed and implemented under `internal/feature/jobtype`
+- [x] `/v1/teams` is fully routed and implemented under `internal/feature/team`
+- [x] `/v1/stations` is fully routed and implemented under `internal/feature/station`
+- [x] Auth routes are wired through `internal/feature/auth`
+- [x] User routes are wired through `internal/feature/user`
+
+### Retired transitional handlers
+
+- [x] Auth handler logic was moved into `internal/feature/auth`
+- [x] User handler logic was moved into `internal/feature/user`
+- [x] Dashboard handler logic was moved into `internal/feature/dashboard`
+- [x] Master data handler logic was moved into feature packages
+- [x] Upload flow remains a separate legacy area for now, but the release/runbook notes cover it explicitly
 
 ## Known gaps / risks
 
 | Gap | Impact | Preferred plan |
 |---|---|---|
-| Mixed architecture in TaskDaily | Future changes may duplicate rules across usecase and handler | Complete TaskDaily vertical slice first |
-| Monthly plan handler is large and owns storage + policy + persistence | Hard to test role/team restrictions and file states | Extract usecases and storage port |
+| Dashboard feature currently bridges to legacy handler for business logic | Feature route entrypoint is readable, but aggregation logic is still hard to unit test | Move queries into `internal/feature/dashboard/repository`, orchestration into `service`, mapping into `controller` |
+| Master data feature currently bridges to legacy handlers | Feature route entrypoint is readable, but CRUD duplication remains | Split `jobtype` first, then repeat for the remaining reference data features |
+| Auth/User features currently bridge to legacy handlers | Security behavior is preserved, but handler-heavy GORM code remains | Add focused tests, then extract auth/user services carefully |
 | Dashboard aggregates live in handler | Hard to test filters/performance regressions | Extract query service/repository |
-| Master data CRUD duplication | Repeated validation/error behavior | Establish a small module pattern after core slices |
+| Master data CRUD duplication | Repeated validation/error behavior | Establish a Hinghoi-style `jobtype` feature first |
 | Auth/User are security-sensitive and handler-heavy | Password/JWT regressions possible | Add tests before extracting |
-| README documents `/api` while router uses `/v1` | Onboarding confusion | Update docs after route behavior is confirmed |
-| No architecture boundary tests | Agents can add wrong dependencies unnoticed | Add in Phase A |
+| DB connection ownership now lives in `pkg/db`; `internal/models` remains the deferred migration target | Connection wiring is centralized, but model relocation is still intentionally deferred | Keep `internal/models` stable for now and only move it when the next architecture phase is explicitly approved |
+
+Resolved for Phase A: architecture boundary tests now exist, so dependency regressions are caught.
 
 ## Do not change yet
 
 - Do not rename API prefix.
 - Do not rename DB columns.
 - Do not replace GORM globally.
-- Do not split every master data handler before TaskDaily and MonthlyPlan are stable.
+- Do not move `internal/models` into `pkg/db` until feature migration is stable.
+- Do not split every master data handler before Dashboard and the first master data reference feature are stable under `internal/feature`.
