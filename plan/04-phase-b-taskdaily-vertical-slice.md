@@ -1,5 +1,7 @@
 # Phase B - TaskDaily Vertical Slice
 
+> **Structure rule:** All code in this phase MUST follow the module-first vertical-slice layout defined in [`00-structure-reset.md`](./00-structure-reset.md). Each module lives under `internal/modules/<module>/` with `controller.go`, `service.go`, `repository.go`, `repository_impl.go`, `dto.go`, `errors.go`, and `entity.go` as needed. The pilot at `internal/modules/task/` is the reference. New task logic goes in `internal/modules/task/`, not in the legacy `internal/domain/`, `internal/app/`, `internal/port/`, or `internal/adapter/out/` paths.
+
 ## Goal
 
 Complete the TaskDaily module so all `/v1/tasks*` endpoints use application usecases and repository ports. This creates the pattern for later domains.

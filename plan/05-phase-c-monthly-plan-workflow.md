@@ -1,20 +1,21 @@
 # Phase C - Monthly Plan Workflow
 
+> **Structure rule:** All code in this phase MUST follow the module-first vertical-slice layout defined in [`00-structure-reset.md`](./00-structure-reset.md). Each module lives under `internal/modules/<module>/` with `controller.go`, `service.go`, `repository.go`, `repository_impl.go`, `dto.go`, `errors.go`, and `entity.go` as needed. The pilot at `internal/modules/task/` is the reference. Do **not** create new files under `internal/domain/`, `internal/app/`, `internal/port/`, or `internal/adapter/out/` for monthly plan — put everything under `internal/modules/monthlyplan/`.
+
 ## Goal
 
-Extract the large monthly plan handler into testable usecases and ports while preserving the existing `/v1/monthly-plans*` API and Cloudflare R2 upload behavior.
+Extract the large monthly plan handler into testable services and repository ports while preserving the existing `/v1/monthly-plans*` API and Cloudflare R2 upload behavior.
 
-## C1 - Domain and ports
+## C1 - Domain entities, errors, and ports
 
-**Objective:** Define monthly plan domain structures, repository contract, and storage contract.
+**Objective:** Define monthly plan domain structures, repository contract, and storage contract inside the module.
 
 **Files:**
 
-- Create: `internal/domain/monthlyplan/entity.go`
-- Create: `internal/domain/monthlyplan/errors.go`
-- Create: `internal/domain/monthlyplan/policy.go`
-- Create: `internal/port/outbound/repository/monthly_plan_repository.go`
-- Create: `internal/port/outbound/storage/object_storage.go`
+- Create: `internal/modules/monthlyplan/entity.go`
+- Create: `internal/modules/monthlyplan/errors.go`
+- Create: `internal/modules/monthlyplan/repository.go`
+- Create: `internal/modules/monthlyplan/dto.go`
 
 **Task cards:**
 
@@ -26,14 +27,14 @@ Extract the large monthly plan handler into testable usecases and ports while pr
 - [ ] `SubmissionStatus`
 - [ ] `FileSizeLog`
 
-### C1.2 Policy types
+### C1.2 Policy types (in entity.go or errors.go)
 
 - [ ] Actor id
 - [ ] Actor role
 - [ ] Actor team id if available
 - [ ] Admin override behavior
 
-### C1.3 Repository interface
+### C1.3 Repository interface (in repository.go)
 
 - [ ] Find or create period
 - [ ] Get/update settings
@@ -42,40 +43,38 @@ Extract the large monthly plan handler into testable usecases and ports while pr
 - [ ] Create file size log
 - [ ] Submission status query
 
-### C1.4 Storage interface
+### C1.4 Storage interface (in repository.go or separate port)
 
 - [ ] Presign upload
 - [ ] Presign download
 - [ ] Delete object
 - [ ] Object key generation policy stays outside handler
 
-## C2 - Settings and period usecases
+## C2 - Settings and period services
 
 **Objective:** Move settings and period behavior out of `monthly_plan.go`.
 
 **Files:**
 
-- Create: `internal/app/monthlyplan/usecase/get_or_create_period.go`
-- Create: `internal/app/monthlyplan/usecase/get_settings.go`
-- Create: `internal/app/monthlyplan/usecase/update_settings.go`
-- Create tests
+- Create: `internal/modules/monthlyplan/service.go` (settings/period methods)
+- Create: `internal/modules/monthlyplan/service_test.go`
 
 **Task cards:**
 
 - [ ] Validate year/month bounds
 - [ ] Preserve default settings behavior
-- [ ] Admin-only setting update policy is enforced by handler/middleware and tested at usecase boundary if actor is passed
+- [ ] Admin-only setting update policy is enforced by controller/middleware and tested at service boundary if actor is passed
 - [ ] Response mapping matches existing DTO
 
-## C3 - Upload usecases
+## C3 - Upload services
 
 **Objective:** Separate presign and confirm upload flows.
 
 **Files:**
 
-- Create: `internal/app/monthlyplan/usecase/presign_upload.go`
-- Create: `internal/app/monthlyplan/usecase/confirm_upload.go`
-- Create tests with fake repository and fake storage
+- Create: `internal/modules/monthlyplan/service.go` (upload methods)
+- Create: `internal/modules/monthlyplan/repository_impl.go` (GORM + R2 adapter)
+- Create: `internal/modules/monthlyplan/service_test.go`
 
 **Task cards:**
 
@@ -96,19 +95,14 @@ Extract the large monthly plan handler into testable usecases and ports while pr
 - [ ] Preserve master plan vs team-specific behavior
 - [ ] Return existing file response shape
 
-## C4 - File lifecycle usecases
+## C4 - File lifecycle services
 
 **Objective:** Extract list/status/download/delete/restore/hard-delete behavior.
 
 **Files:**
 
-- Create: `internal/app/monthlyplan/usecase/list_files.go`
-- Create: `internal/app/monthlyplan/usecase/get_submission_status.go`
-- Create: `internal/app/monthlyplan/usecase/get_download_url.go`
-- Create: `internal/app/monthlyplan/usecase/soft_delete_file.go`
-- Create: `internal/app/monthlyplan/usecase/restore_file.go`
-- Create: `internal/app/monthlyplan/usecase/hard_delete_file.go`
-- Create tests
+- Extend: `internal/modules/monthlyplan/service.go`
+- Extend: `internal/modules/monthlyplan/service_test.go`
 
 **Task cards:**
 
@@ -119,14 +113,13 @@ Extract the large monthly plan handler into testable usecases and ports while pr
 - [ ] Restore only allowed for admin
 - [ ] Hard delete removes metadata and R2 object per current behavior
 
-## C5 - GORM repository and R2 adapter
+## C5 - GORM repository implementation and R2 adapter
 
-**Objective:** Move persistence/storage details behind ports.
+**Objective:** Move persistence/storage details behind module-local ports.
 
 **Files:**
 
-- Create: `internal/adapter/out/persistence/gorm/monthly_plan_repository.go`
-- Create: `internal/adapter/out/storage/r2/object_storage.go`
+- Create: `internal/modules/monthlyplan/repository_impl.go`
 - Modify: `pkg/s3/r2.go` only if a thin wrapper is needed
 
 **Task cards:**
@@ -134,29 +127,30 @@ Extract the large monthly plan handler into testable usecases and ports while pr
 - [ ] Reuse existing models from `internal/models`
 - [ ] Keep column-name helpers from `internal/models/columns.go`
 - [ ] Use transactions for confirm upload and hard delete metadata where needed
-- [ ] Keep R2 config and SDK details outside usecases
+- [ ] Keep R2 config and SDK details outside service layer
 
-## C6 - Refactor handler
+## C6 - Refactor controller and router
 
-**Objective:** Make `MonthlyPlanHandler` parse/map/delegate only.
+**Objective:** Make `MonthlyPlanController` parse/map/delegate only.
 
 **Files:**
 
-- Modify: `internal/handlers/v1/monthly_plan.go`
+- Create: `internal/modules/monthlyplan/controller.go`
 - Modify: `internal/router/router.go` only for constructor wiring if needed
+- Retire or thin: `internal/handlers/v1/monthly_plan.go` once module is routed
 
 **Task cards:**
 
-- [ ] Constructor accepts usecases or constructs adapters in one place consistently
-- [ ] Handler keeps route-level auth context parsing
-- [ ] Handler maps errors to existing envelope
+- [ ] Constructor accepts repository or constructs adapters in one place consistently
+- [ ] Controller keeps route-level auth context parsing
+- [ ] Controller maps errors to existing envelope
 - [ ] Existing route list remains unchanged
 
 ## Phase C acceptance
 
 ```bash
-go test ./internal/app/monthlyplan/... -v
-go test ./internal/adapter/out/persistence/gorm -run TestMonthlyPlan -v
-go test ./internal/handlers/v1 -run TestMonthlyPlan -v
+go test ./internal/modules/monthlyplan/... -v
 go test ./...
+go vet ./...
+go build -o /tmp/hotlines-api main.go
 ```

@@ -9,6 +9,7 @@ import (
 	"backend-hotlines3/internal/config"
 	mpusecase "backend-hotlines3/internal/app/monthlyplan/usecase"
 	v1 "backend-hotlines3/internal/handlers/v1"
+	taskmodule "backend-hotlines3/internal/modules/task"
 	"backend-hotlines3/internal/middleware"
 	"backend-hotlines3/pkg/jwt"
 	"backend-hotlines3/pkg/s3"
@@ -147,7 +148,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 		// Tasks
 		tasksV1 := apiV1.Group("/tasks")
 		{
-			handler := v1.NewTaskHandler(gormadapter.NewTaskRepository(db))
+			handler := taskmodule.NewController(taskmodule.NewRepositoryImpl(db))
 			tasksV1.GET("", middleware.CachePublic(60), handler.List)                    // cache 1 min (paginated, dynamic filters)
 			tasksV1.GET("/by-team", middleware.CachePublic(120), handler.ListByTeam)     // cache 2 min
 			tasksV1.GET("/by-filter", middleware.CachePublic(180), handler.ListByFilter) // cache 3 min (per year/month combo)

@@ -1,23 +1,25 @@
 # Phase E - Auth, User, and Deploy Hardening
 
+> **Structure rule:** All code in this phase MUST follow the module-first vertical-slice layout defined in [`00-structure-reset.md`](./00-structure-reset.md). Each module lives under `internal/modules/<module>/` with `controller.go`, `service.go`, `repository.go`, `repository_impl.go`, `dto.go`, `errors.go`, and `entity.go` as needed. The pilot at `internal/modules/task/` is the reference. Do **not** create new files under `internal/domain/`, `internal/app/`, `internal/port/`, or `internal/adapter/out/` — put auth under `internal/modules/auth/` and user under `internal/modules/user/`.
+
 ## Goal
 
 Refactor security-sensitive auth/user behavior after core operational modules are stable, then finish release/deploy readiness.
 
-## E1 - Auth usecases and tests
+## E1 - Auth module
 
 **Objective:** Move login/refresh/logout/me behavior out of direct handler/GORM code.
 
 **Files:**
 
-- Create: `internal/domain/auth/errors.go`
-- Create: `internal/app/auth/usecase/login.go`
-- Create: `internal/app/auth/usecase/refresh.go`
-- Create: `internal/app/auth/usecase/logout.go`
-- Create: `internal/app/auth/usecase/me.go`
-- Create: `internal/port/outbound/repository/auth_repository.go`
-- Create tests
-- Modify: `internal/handlers/v1/auth.go`
+- Create: `internal/modules/auth/controller.go`
+- Create: `internal/modules/auth/service.go`
+- Create: `internal/modules/auth/repository.go`
+- Create: `internal/modules/auth/repository_impl.go`
+- Create: `internal/modules/auth/dto.go`
+- Create: `internal/modules/auth/errors.go`
+- Create: `internal/modules/auth/entity.go`
+- Retire or thin: `internal/handlers/v1/auth.go` once module is routed
 
 **Task cards:**
 
@@ -42,18 +44,20 @@ Refactor security-sensitive auth/user behavior after core operational modules ar
 - [ ] Returns current user shape
 - [ ] Inactive/missing user behavior is tested
 
-## E2 - User usecases and tests
+## E2 - User module
 
-**Objective:** Move user management and change password behavior into usecases.
+**Objective:** Move user management and change password behavior into module services.
 
 **Files:**
 
-- Create: `internal/domain/user/entity.go`
-- Create: `internal/domain/user/errors.go`
-- Create: `internal/app/user/usecase/*.go`
-- Create: `internal/port/outbound/repository/user_repository.go`
-- Create: `internal/adapter/out/persistence/gorm/user_repository.go`
-- Modify: `internal/handlers/v1/user.go`
+- Create: `internal/modules/user/controller.go`
+- Create: `internal/modules/user/service.go`
+- Create: `internal/modules/user/repository.go`
+- Create: `internal/modules/user/repository_impl.go`
+- Create: `internal/modules/user/dto.go`
+- Create: `internal/modules/user/errors.go`
+- Create: `internal/modules/user/entity.go`
+- Retire or thin: `internal/handlers/v1/user.go` once module is routed
 
 **Task cards:**
 
@@ -112,11 +116,11 @@ Refactor security-sensitive auth/user behavior after core operational modules ar
 
 **Task cards:**
 
-- [ ] No new direct business GORM in migrated handlers
-- [ ] Usecase packages do not import Gin
-- [ ] Domain packages do not import GORM/Gin/Viper/AWS
+- [ ] No new direct business GORM in migrated controllers
+- [ ] Service packages do not import Gin
+- [ ] Entity/error packages do not import GORM/Gin/Viper/AWS
 - [ ] Repository interfaces return domain entities/results
-- [ ] README describes the new structure
+- [ ] README describes the module-first structure
 
 ## Phase E acceptance
 

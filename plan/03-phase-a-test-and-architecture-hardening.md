@@ -1,8 +1,10 @@
 # Phase A - Test and Architecture Hardening
 
+> **Structure rule:** All code in this phase MUST follow the module-first vertical-slice layout defined in [`00-structure-reset.md`](./00-structure-reset.md). Each module lives under `internal/modules/<module>/` with `controller.go`, `service.go`, `repository.go`, `repository_impl.go`, `dto.go`, `errors.go`, and `entity.go` as needed. The pilot at `internal/modules/task/` is the reference. Architecture tests here MUST also fail when new code lands in the legacy `internal/domain/`, `internal/app/`, `internal/port/`, or `internal/adapter/out/` paths instead of `internal/modules/<module>/`.
+
 ## Goal
 
-Lock current behavior before moving more handler logic into usecases. This phase should create guardrails, not perform broad refactors.
+Lock current behavior before moving more handler logic into module services, and add guardrails that keep new code inside `internal/modules/<module>/`. This phase should create guardrails, not perform broad refactors.
 
 ## A1 - Architecture boundary tests
 
@@ -14,10 +16,10 @@ Lock current behavior before moving more handler logic into usecases. This phase
 
 **Task cards:**
 
-### A1.1 Test usecases do not import Gin
+### A1.1 Test services/usecases do not import Gin
 
-- [ ] Walk `internal/app/**/*.go`
-- [ ] Fail if a non-test usecase file imports `github.com/gin-gonic/gin`
+- [ ] Walk `internal/modules/**/service.go` and any remaining `internal/app/**/*.go`
+- [ ] Fail if a non-test service/usecase file imports `github.com/gin-gonic/gin`
 - [ ] Add clear failure message naming the file
 
 Run:
@@ -26,10 +28,10 @@ Run:
 go test ./internal/architecture -run TestUsecasesDoNotImportGin -v
 ```
 
-### A1.2 Test domain does not import frameworks
+### A1.2 Test entity/domain files do not import frameworks
 
-- [ ] Walk `internal/domain/**/*.go`
-- [ ] Fail on imports from `gin`, `gorm`, `viper`, AWS SDK, or local handlers
+- [ ] Walk `internal/modules/**/entity.go`, `internal/modules/**/errors.go`, and any remaining `internal/domain/**/*.go`
+- [ ] Fail on imports from `gin`, `gorm`, `viper`, AWS SDK, or local handlers/controllers
 - [ ] Allow only standard library and value-library imports when justified
 
 ### A1.3 Test router has no business queries
@@ -40,9 +42,16 @@ go test ./internal/architecture -run TestUsecasesDoNotImportGin -v
 
 ### A1.4 Test migrated repositories do not leak GORM models
 
-- [ ] Inspect `internal/port/outbound/repository/*.go`
+- [ ] Inspect `internal/modules/**/repository.go` and any remaining `internal/port/outbound/repository/*.go`
 - [ ] Fail if repository interfaces return `internal/models` types
-- [ ] Allow domain entities and primitive DTO/query structs only
+- [ ] Allow module entities/DTOs (declared in the same module folder) and primitive query structs only
+
+### A1.5 Test the module-first layout stays the canonical home
+
+- [ ] Walk `internal/modules/**/*.go` and confirm each migrated module owns the seven-file shape (`controller.go`, `service.go`, `repository.go`, `repository_impl.go`, `dto.go`, `errors.go`, `entity.go` when present)
+- [ ] Fail if a controller imports GORM directly
+- [ ] Fail if a service imports Gin
+- [ ] Fail if any new code is added under `internal/domain/`, `internal/app/`, `internal/port/`, or `internal/adapter/out/` for a feature that is already migrated to `internal/modules/<module>/`
 
 Final verification:
 
@@ -96,8 +105,8 @@ go test ./...
 
 **Files:**
 
-- Create: `internal/dto/response_test.go`
-- Create if needed: `internal/handlers/v1/error_mapping_test.go`
+- Create: `internal/dto/response_test.go` (the standard envelope still lives in `internal/dto` and is shared infra; do not migrate it into a module)
+- Create if needed: `internal/modules/task/error_mapping_test.go` for any task-specific assertions; legacy mapping coverage in `internal/handlers/v1/error_mapping_test.go` may stay only until the matching handler is removed
 
 **Task cards:**
 
@@ -115,13 +124,14 @@ go test ./...
 
 ## A4 - TaskDaily list behavior tests
 
-**Objective:** Lock the only partially migrated usecase before completing the slice.
+**Objective:** Lock the partially migrated TaskDaily list flow before completing the slice in Phase B.
 
 **Files:**
 
-- Create: `internal/app/task/usecase/list_tasks_test.go`
-- Create: `internal/adapter/out/persistence/gorm/task_repository_test.go` if DB test setup is practical
-- Create or modify: `internal/handlers/v1/task_test.go`
+- Create: `internal/modules/task/service_test.go` (covers list pagination/normalization)
+- Create: `internal/modules/task/repository_impl_test.go` if DB test setup is practical
+- Create or modify: `internal/modules/task/controller_test.go`
+- Existing legacy tests under `internal/app/task/usecase/` and `internal/handlers/v1/` may stay until Phase B retires them, but new assertions belong in the module folder
 
 **Task cards:**
 
