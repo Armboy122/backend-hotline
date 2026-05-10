@@ -1,5 +1,40 @@
+# Local agent/editor state
 .aider*
-.agents
+.agents/
+.claude/
+.hermes/
+.hermes-tmp/
+.obsidian/
+.thclaws/
+Projects/
+
+# Local environment / secrets
 .env
+.env.*
+!.env.example
+config.local.yaml
+config.*.local.yaml
+
+# Build/test outputs
 hotlines3-api
-bin/
+hotlines-api
+backend-hotline
+backend-hotlines3
+/bin/
+/dist/
+/tmp/
+*.test
+*.out
+*.prof
+coverage.*
+*.log
+.DS_Store
+
+# Legacy one-off DB repair / local diagnostic commands.
+# Keep cmd/bootstrap-super-admin tracked; it is an operational bootstrap tool.
+/cmd/fix-schema/
+/cmd/fix-workdate/
+/cmd/lowercase-columns/
+/cmd/migrate/
+/cmd/rename-column/
+/cmd/test-read/

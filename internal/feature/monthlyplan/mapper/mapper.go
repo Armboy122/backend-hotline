@@ -18,10 +18,20 @@ func ToPlanFileResponse(f entity.PlanFileEntity) dto.PlanFileResponse {
 		FileName:      f.FileName,
 		FileSizeBytes: f.FileSizeBytes,
 		Description:   f.Description,
+		Destination:   f.Destination,
+		Remarks:       f.Remarks,
 		IsMasterPlan:  f.IsMasterPlan,
 		IsDeleted:     f.IsDeleted,
 		CreatedAt:     f.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:     f.UpdatedAt.Format(time.RFC3339),
+	}
+	if f.WorkStartDate != nil {
+		workStartDate := f.WorkStartDate.Format("2006-01-02")
+		resp.WorkStartDate = &workStartDate
+	}
+	if f.WorkEndDate != nil {
+		workEndDate := f.WorkEndDate.Format("2006-01-02")
+		resp.WorkEndDate = &workEndDate
 	}
 	if f.DeletedAt != nil {
 		deletedAt := f.DeletedAt.Format(time.RFC3339)

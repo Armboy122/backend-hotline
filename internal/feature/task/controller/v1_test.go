@@ -6,11 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	taskdto "backend-hotlines3/internal/feature/task/dto"
-	"backend-hotlines3/internal/feature/task/entity"
+	taskentity "backend-hotlines3/internal/feature/task/entity"
 	taskrepository "backend-hotlines3/internal/feature/task/repository"
 	taskservice "backend-hotlines3/internal/feature/task/service"
 
@@ -18,27 +19,33 @@ import (
 )
 
 type fakeService struct {
-	capturedList taskservice.ListTasksInput
-	listOutput   *taskservice.ListTasksOutput
-	listErr      error
+	capturedActor taskentity.Actor
+	capturedList  taskservice.ListTasksInput
+	listOutput    *taskservice.ListTasksOutput
+	listErr       error
+	createResult  *taskentity.Task
+	createErr     error
 }
 
-func (f *fakeService) List(_ context.Context, input taskservice.ListTasksInput) (*taskservice.ListTasksOutput, error) {
+func (f *fakeService) List(_ context.Context, actor taskentity.Actor, input taskservice.ListTasksInput) (*taskservice.ListTasksOutput, error) {
+	f.capturedActor = actor
 	f.capturedList = input
 	return f.listOutput, f.listErr
 }
-func (f *fakeService) GetByID(context.Context, int64) (*entity.Task, error) { return nil, nil }
-func (f *fakeService) Create(context.Context, taskservice.CreateTaskInput) (*entity.Task, error) {
+func (f *fakeService) GetByID(context.Context, taskentity.Actor, int64) (*taskentity.Task, error) {
 	return nil, nil
 }
-func (f *fakeService) Update(context.Context, taskservice.UpdateTaskInput) (*entity.Task, error) {
+func (f *fakeService) Create(context.Context, taskentity.Actor, taskservice.CreateTaskInput) (*taskentity.Task, error) {
+	return f.createResult, f.createErr
+}
+func (f *fakeService) Update(context.Context, taskentity.Actor, taskservice.UpdateTaskInput) (*taskentity.Task, error) {
 	return nil, nil
 }
-func (f *fakeService) Delete(context.Context, int64) error { return nil }
-func (f *fakeService) ListByTeam(context.Context, taskservice.ListTasksByTeamInput) (*taskservice.ListTasksByTeamOutput, error) {
+func (f *fakeService) Delete(context.Context, taskentity.Actor, int64) error { return nil }
+func (f *fakeService) ListByTeam(context.Context, taskentity.Actor, taskservice.ListTasksByTeamInput) (*taskservice.ListTasksByTeamOutput, error) {
 	return nil, nil
 }
-func (f *fakeService) ListByFilter(context.Context, taskservice.ListTasksByFilterInput) (*taskservice.ListTasksByFilterOutput, error) {
+func (f *fakeService) ListByFilter(context.Context, taskentity.Actor, taskservice.ListTasksByFilterInput) (*taskservice.ListTasksByFilterOutput, error) {
 	return nil, nil
 }
 
@@ -49,7 +56,7 @@ func TestListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
 	now := time.Date(2026, 4, 28, 12, 30, 0, 0, time.UTC)
 	feederID := int64(7)
 	operationCenterID := int64(55)
-	task := entity.Task{
+	task := taskentity.Task{
 		ID:                  101,
 		WorkDate:            workDate,
 		TeamID:              11,
@@ -70,7 +77,7 @@ func TestListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
 	}
 	service := &fakeService{
 		listOutput: &taskservice.ListTasksOutput{
-			Tasks: []entity.Task{task},
+			Tasks: []taskentity.Task{task},
 			Total: 1,
 			Page:  1,
 			Limit: 50,
@@ -79,6 +86,12 @@ func TestListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
 	c := &controller{service: service}
 
 	r := gin.New()
+	r.Use(func(ctx *gin.Context) {
+		ctx.Set("user_id", uint(5))
+		ctx.Set("role", "user")
+		ctx.Set("team_id", int64(11))
+		ctx.Next()
+	})
 	r.GET("/v1/tasks", c.List)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/tasks?page=0&limit=200&teamId=11&jobTypeId=22&feederId=7&workDate=2026-04-28", nil)
@@ -87,6 +100,9 @@ func TestListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if service.capturedActor.Role != "user" || service.capturedActor.TeamID == nil || *service.capturedActor.TeamID != 11 {
+		t.Fatalf("captured actor = %#v, want user team 11", service.capturedActor)
 	}
 	if service.capturedList.Page != 0 || service.capturedList.Limit != 200 {
 		t.Fatalf("captured pagination = (%d,%d), want (0,200)", service.capturedList.Page, service.capturedList.Limit)
@@ -139,6 +155,7 @@ func TestListMapsServiceErrorToStandardError(t *testing.T) {
 
 	c := &controller{service: &fakeService{listErr: errors.New("db failure")}}
 	r := gin.New()
+	r.Use(func(ctx *gin.Context) { ctx.Set("user_id", uint(1)); ctx.Set("role", "admin"); ctx.Next() })
 	r.GET("/v1/tasks", c.List)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/tasks", nil)
@@ -166,6 +183,46 @@ func TestListMapsServiceErrorToStandardError(t *testing.T) {
 	}
 	if resp.Error.Message != "db failure" {
 		t.Fatalf("Error.Message = %q, want db failure", resp.Error.Message)
+	}
+}
+
+func TestCreateMapsForbiddenToForbiddenResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	service := &fakeService{createErr: taskservice.ErrForbidden}
+	c := &controller{service: service}
+	r := gin.New()
+	r.Use(func(ctx *gin.Context) {
+		ctx.Set("user_id", uint(5))
+		ctx.Set("role", "user")
+		ctx.Set("team_id", int64(11))
+		ctx.Next()
+	})
+	r.POST("/v1/tasks", c.Create)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks", strings.NewReader(`{"workDate":"2026-04-28","teamId":99,"jobTypeId":1,"jobDetailId":1}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+func TestListRequiresAuthenticatedActor(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	c := &controller{service: &fakeService{}}
+	r := gin.New()
+	r.GET("/v1/tasks", c.List)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/tasks", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 }
 

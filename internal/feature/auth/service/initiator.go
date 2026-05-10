@@ -64,7 +64,7 @@ func (s *Service) Login(ctx context.Context, username, pwd string) (entity.Login
 
 	s.repo.UpdateLastLogin(ctx, authUser.ID, time.Now())
 
-	access, refresh, err := s.jwtManager.GenerateTokenPair(authUser.ID, authUser.Username, authUser.Role)
+	access, refresh, err := s.jwtManager.GenerateTokenPair(authUser.ID, authUser.Username, authUser.Role, authUser.TeamID)
 	if err != nil {
 		return entity.LoginResult{}, err
 	}
@@ -94,7 +94,7 @@ func (s *Service) RefreshToken(ctx context.Context, refreshToken string) (entity
 		return entity.TokenPair{}, entity.ErrAccountDisabled
 	}
 
-	access, refresh, err := s.jwtManager.GenerateTokenPair(authUser.ID, authUser.Username, authUser.Role)
+	access, refresh, err := s.jwtManager.GenerateTokenPair(authUser.ID, authUser.Username, authUser.Role, authUser.TeamID)
 	if err != nil {
 		return entity.TokenPair{}, err
 	}

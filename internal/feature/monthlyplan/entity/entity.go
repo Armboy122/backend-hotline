@@ -22,6 +22,10 @@ type PlanFileEntity struct {
 	FileName      string
 	FileSizeBytes int64
 	Description   *string
+	WorkStartDate *time.Time
+	WorkEndDate   *time.Time
+	Destination   *string
+	Remarks       *string
 	IsMasterPlan  bool
 	IsDeleted     bool
 	DeletedAt     *time.Time

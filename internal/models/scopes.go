@@ -1,6 +1,11 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"fmt"
+	"strconv"
+
+	"gorm.io/gorm"
+)
 
 // TaskNotDeleted filters out soft-deleted TaskDaily records.
 func TaskNotDeleted(db *gorm.DB) *gorm.DB {
@@ -17,13 +22,17 @@ func UserNotDeleted(db *gorm.DB) *gorm.DB {
 	return db.Where(UserCol.DeletedAt + " IS NULL")
 }
 
-// TaskByYear filters tasks by year extracted from workdate.
+// TaskByYear filters tasks by an index-friendly half-open workdate range.
 func TaskByYear(year string) func(*gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		if year == "" {
 			return db
 		}
-		return db.Where("EXTRACT(YEAR FROM "+TaskCol.WorkDate+") = ?", year)
+		y, err := strconv.Atoi(year)
+		if err != nil || y < 1 {
+			return db.Where("1 = 0")
+		}
+		return db.Where(TaskCol.WorkDate+" >= ? AND "+TaskCol.WorkDate+" < ?", fmt.Sprintf("%04d-01-01", y), fmt.Sprintf("%04d-01-01", y+1))
 	}
 }
 

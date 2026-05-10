@@ -89,7 +89,7 @@ func TestListPaginationNormalization(t *testing.T) {
 			repo := &fakeRepository{}
 			svc := NewService(repo)
 
-			out, err := svc.List(context.Background(), ListTasksInput{Page: tc.inputPage, Limit: tc.inputLimit})
+			out, err := svc.List(context.Background(), actor("super_admin", nil), ListTasksInput{Page: tc.inputPage, Limit: tc.inputLimit})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -103,6 +103,150 @@ func TestListPaginationNormalization(t *testing.T) {
 	}
 }
 
+func TestListScopesNonPrivilegedActorsToOwnTeam(t *testing.T) {
+	repo := &fakeRepository{listTotal: 1}
+	svc := NewService(repo)
+	ownTeamID := int64(42)
+	requestedTeamID := int64(99)
+
+	_, err := svc.List(context.Background(), actor("user", &ownTeamID), ListTasksInput{
+		Page:   1,
+		Limit:  10,
+		Filter: taskrepository.ListFilter{TeamID: &requestedTeamID},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.capturedList.Filter.TeamID == nil || *repo.capturedList.Filter.TeamID != ownTeamID {
+		t.Fatalf("TeamID = %#v, want own team %d", repo.capturedList.Filter.TeamID, ownTeamID)
+	}
+}
+
+func TestListAllowsPrivilegedActorsToFilterAnyTeam(t *testing.T) {
+	repo := &fakeRepository{listTotal: 1}
+	svc := NewService(repo)
+	requestedTeamID := int64(99)
+
+	_, err := svc.List(context.Background(), actor("super_admin", nil), ListTasksInput{
+		Page:   1,
+		Limit:  10,
+		Filter: taskrepository.ListFilter{TeamID: &requestedTeamID},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.capturedList.Filter.TeamID == nil || *repo.capturedList.Filter.TeamID != requestedTeamID {
+		t.Fatalf("TeamID = %#v, want requested team %d", repo.capturedList.Filter.TeamID, requestedTeamID)
+	}
+}
+
+func TestCreateRejectsNonPrivilegedActorWritingAnotherTeam(t *testing.T) {
+	repo := &fakeRepository{}
+	svc := NewService(repo)
+	ownTeamID := int64(42)
+
+	_, err := svc.Create(context.Background(), actor("team_lead", &ownTeamID), CreateTaskInput{
+		WorkDate:    time.Now(),
+		TeamID:      99,
+		JobTypeID:   1,
+		JobDetailID: 1,
+	})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("got %v, want ErrForbidden", err)
+	}
+	if repo.capturedCreate.TeamID != 0 {
+		t.Fatalf("repository Create called with team %d", repo.capturedCreate.TeamID)
+	}
+}
+
+func TestCreateAllowsOptionalEvidenceAndLocationFields(t *testing.T) {
+	repo := &fakeRepository{}
+	svc := NewService(repo)
+	lat := 13.7563
+	lng := 100.5018
+	detail := "attached evidence and GPS"
+
+	_, err := svc.Create(context.Background(), actor("super_admin", nil), CreateTaskInput{
+		WorkDate:    time.Now(),
+		TeamID:      42,
+		JobTypeID:   1,
+		JobDetailID: 1,
+		Detail:      &detail,
+		URLsBefore:  []string{"before.jpg"},
+		URLsAfter:   []string{"after.jpg"},
+		Latitude:    &lat,
+		Longitude:   &lng,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.capturedCreate.Detail == nil || *repo.capturedCreate.Detail != detail {
+		t.Fatalf("Detail = %#v, want %q", repo.capturedCreate.Detail, detail)
+	}
+	if len(repo.capturedCreate.URLsBefore) != 1 || repo.capturedCreate.URLsBefore[0] != "before.jpg" {
+		t.Fatalf("URLsBefore = %#v, want before evidence", repo.capturedCreate.URLsBefore)
+	}
+	if len(repo.capturedCreate.URLsAfter) != 1 || repo.capturedCreate.URLsAfter[0] != "after.jpg" {
+		t.Fatalf("URLsAfter = %#v, want after evidence", repo.capturedCreate.URLsAfter)
+	}
+	if repo.capturedCreate.Latitude == nil || *repo.capturedCreate.Latitude != lat {
+		t.Fatalf("Latitude = %#v, want %v", repo.capturedCreate.Latitude, lat)
+	}
+	if repo.capturedCreate.Longitude == nil || *repo.capturedCreate.Longitude != lng {
+		t.Fatalf("Longitude = %#v, want %v", repo.capturedCreate.Longitude, lng)
+	}
+}
+
+func TestUpdateRejectsNonPrivilegedActorEditingAnotherTeam(t *testing.T) {
+	repo := &fakeRepository{getResult: &entity.Task{ID: 7, TeamID: 99}}
+	svc := NewService(repo)
+	ownTeamID := int64(42)
+	detail := "changed"
+
+	_, err := svc.Update(context.Background(), actor("user", &ownTeamID), UpdateTaskInput{ID: 7, Detail: &detail})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("got %v, want ErrForbidden", err)
+	}
+	if repo.capturedUpdate.ID != 0 {
+		t.Fatalf("repository Update called with id %d", repo.capturedUpdate.ID)
+	}
+}
+
+func TestDeleteRejectsViewerAndAllowsSuperAdmin(t *testing.T) {
+	task := &entity.Task{ID: 7, TeamID: 42}
+	teamID := int64(42)
+	viewerRepo := &fakeRepository{getResult: task}
+	viewerSvc := NewService(viewerRepo)
+	if err := viewerSvc.Delete(context.Background(), actor("viewer", &teamID), 7); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("got %v, want ErrForbidden", err)
+	}
+	if viewerRepo.capturedDelete.ID != 0 {
+		t.Fatalf("repository Delete called with id %d", viewerRepo.capturedDelete.ID)
+	}
+
+	superAdminRepo := &fakeRepository{getResult: task}
+	superAdminSvc := NewService(superAdminRepo)
+	if err := superAdminSvc.Delete(context.Background(), actor("super_admin", nil), 7); err != nil {
+		t.Fatalf("unexpected super_admin delete error: %v", err)
+	}
+	if superAdminRepo.capturedDelete.ID != 7 {
+		t.Fatalf("repository Delete id = %d, want 7", superAdminRepo.capturedDelete.ID)
+	}
+}
+
+func TestAdminCannotCreateOrDeleteGlobalTask(t *testing.T) {
+	task := &entity.Task{ID: 7, TeamID: 42}
+	svc := NewService(&fakeRepository{getResult: task})
+
+	_, err := svc.Create(context.Background(), actor("admin", nil), CreateTaskInput{WorkDate: time.Now(), TeamID: 42, JobTypeID: 1, JobDetailID: 1})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("admin create task: got %v, want ErrForbidden", err)
+	}
+	if err := svc.Delete(context.Background(), actor("admin", nil), 7); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("admin delete task: got %v, want ErrForbidden", err)
+	}
+}
+
 func TestListPassesFiltersAndTotal(t *testing.T) {
 	repo := &fakeRepository{listTotal: 99}
 	svc := NewService(repo)
@@ -111,7 +255,7 @@ func TestListPassesFiltersAndTotal(t *testing.T) {
 	feederID := int64(3)
 	workDate := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
 
-	out, err := svc.List(context.Background(), ListTasksInput{
+	out, err := svc.List(context.Background(), actor("super_admin", nil), ListTasksInput{
 		Page:  1,
 		Limit: 10,
 		Filter: taskrepository.ListFilter{
@@ -139,7 +283,7 @@ func TestListPropagatesRepositoryError(t *testing.T) {
 	repo := &fakeRepository{listErr: errors.New("db failure")}
 	svc := NewService(repo)
 
-	out, err := svc.List(context.Background(), ListTasksInput{Page: 1, Limit: 10})
+	out, err := svc.List(context.Background(), actor("super_admin", nil), ListTasksInput{Page: 1, Limit: 10})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -150,36 +294,36 @@ func TestListPropagatesRepositoryError(t *testing.T) {
 
 func TestGetByIDValidationAndNotFound(t *testing.T) {
 	svc := NewService(&fakeRepository{})
-	if _, err := svc.GetByID(context.Background(), 0); !errors.Is(err, ErrInvalidTaskID) {
+	if _, err := svc.GetByID(context.Background(), actor("super_admin", nil), 0); !errors.Is(err, ErrInvalidTaskID) {
 		t.Fatalf("got %v, want ErrInvalidTaskID", err)
 	}
-	if _, err := svc.GetByID(context.Background(), 1); !errors.Is(err, ErrTaskNotFound) {
+	if _, err := svc.GetByID(context.Background(), actor("super_admin", nil), 1); !errors.Is(err, ErrTaskNotFound) {
 		t.Fatalf("got %v, want ErrTaskNotFound", err)
 	}
 }
 
 func TestCreateValidation(t *testing.T) {
 	svc := NewService(&fakeRepository{})
-	if _, err := svc.Create(context.Background(), CreateTaskInput{TeamID: 1, JobTypeID: 1, JobDetailID: 1}); !errors.Is(err, ErrWorkDateRequired) {
+	if _, err := svc.Create(context.Background(), actor("super_admin", nil), CreateTaskInput{TeamID: 1, JobTypeID: 1, JobDetailID: 1}); !errors.Is(err, ErrWorkDateRequired) {
 		t.Fatalf("got %v, want ErrWorkDateRequired", err)
 	}
-	if _, err := svc.Create(context.Background(), CreateTaskInput{WorkDate: time.Now(), JobTypeID: 1, JobDetailID: 1}); !errors.Is(err, ErrTeamIDRequired) {
+	if _, err := svc.Create(context.Background(), actor("super_admin", nil), CreateTaskInput{WorkDate: time.Now(), JobTypeID: 1, JobDetailID: 1}); !errors.Is(err, ErrTeamIDRequired) {
 		t.Fatalf("got %v, want ErrTeamIDRequired", err)
 	}
-	if _, err := svc.Create(context.Background(), CreateTaskInput{WorkDate: time.Now(), TeamID: 1, JobDetailID: 1}); !errors.Is(err, ErrJobTypeIDRequired) {
+	if _, err := svc.Create(context.Background(), actor("super_admin", nil), CreateTaskInput{WorkDate: time.Now(), TeamID: 1, JobDetailID: 1}); !errors.Is(err, ErrJobTypeIDRequired) {
 		t.Fatalf("got %v, want ErrJobTypeIDRequired", err)
 	}
-	if _, err := svc.Create(context.Background(), CreateTaskInput{WorkDate: time.Now(), TeamID: 1, JobTypeID: 1}); !errors.Is(err, ErrJobDetailIDRequired) {
+	if _, err := svc.Create(context.Background(), actor("super_admin", nil), CreateTaskInput{WorkDate: time.Now(), TeamID: 1, JobTypeID: 1}); !errors.Is(err, ErrJobDetailIDRequired) {
 		t.Fatalf("got %v, want ErrJobDetailIDRequired", err)
 	}
 }
 
 func TestUpdateAndDeleteValidation(t *testing.T) {
 	svc := NewService(&fakeRepository{})
-	if _, err := svc.Update(context.Background(), UpdateTaskInput{ID: 0}); !errors.Is(err, ErrInvalidTaskID) {
+	if _, err := svc.Update(context.Background(), actor("super_admin", nil), UpdateTaskInput{ID: 0}); !errors.Is(err, ErrInvalidTaskID) {
 		t.Fatalf("got %v, want ErrInvalidTaskID", err)
 	}
-	if err := svc.Delete(context.Background(), 0); !errors.Is(err, ErrInvalidTaskID) {
+	if err := svc.Delete(context.Background(), actor("super_admin", nil), 0); !errors.Is(err, ErrInvalidTaskID) {
 		t.Fatalf("got %v, want ErrInvalidTaskID", err)
 	}
 }
@@ -188,7 +332,7 @@ func TestListByTeamNormalization(t *testing.T) {
 	repo := &fakeRepository{}
 	svc := NewService(repo)
 
-	out, err := svc.ListByTeam(context.Background(), ListTasksByTeamInput{Page: 0, Limit: 501})
+	out, err := svc.ListByTeam(context.Background(), actor("super_admin", nil), ListTasksByTeamInput{Page: 0, Limit: 501})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -203,10 +347,14 @@ func TestListByTeamNormalization(t *testing.T) {
 func TestListByFilterRequiresYearMonth(t *testing.T) {
 	svc := NewService(&fakeRepository{})
 
-	if _, err := svc.ListByFilter(context.Background(), ListTasksByFilterInput{Year: "", Month: "1"}); !errors.Is(err, ErrYearMonthRequired) {
+	if _, err := svc.ListByFilter(context.Background(), actor("super_admin", nil), ListTasksByFilterInput{Year: "", Month: "1"}); !errors.Is(err, ErrYearMonthRequired) {
 		t.Fatalf("got %v, want ErrYearMonthRequired", err)
 	}
-	if _, err := svc.ListByFilter(context.Background(), ListTasksByFilterInput{Year: "2024", Month: ""}); !errors.Is(err, ErrYearMonthRequired) {
+	if _, err := svc.ListByFilter(context.Background(), actor("super_admin", nil), ListTasksByFilterInput{Year: "2024", Month: ""}); !errors.Is(err, ErrYearMonthRequired) {
 		t.Fatalf("got %v, want ErrYearMonthRequired", err)
 	}
+}
+
+func actor(role string, teamID *int64) entity.Actor {
+	return entity.Actor{UserID: 1, Role: role, TeamID: teamID}
 }

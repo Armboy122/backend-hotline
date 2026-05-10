@@ -24,6 +24,10 @@ type PlanFileCreateInput struct {
 	FileName      string
 	FileSizeBytes int64
 	Description   *string
+	WorkStartDate *time.Time
+	WorkEndDate   *time.Time
+	Destination   *string
+	Remarks       *string
 	IsMasterPlan  bool
 }
 
@@ -31,6 +35,11 @@ type PlanFileListQuery struct {
 	MonthlyPlanID int64
 	TeamID        int64
 	Search        string
+}
+
+type PlanFileBatchListQuery struct {
+	MonthlyPlanIDs []int64
+	TeamID         int64
 }
 
 type PlanFileSoftDeleteInput struct {
@@ -67,10 +76,13 @@ type TeamInfo struct {
 
 type Repository interface {
 	FindPeriod(ctx context.Context, q PeriodFindQuery) (*entity.Entity, error)
+	GetPeriodByID(ctx context.Context, id int64) (*entity.Entity, error)
 	FindOrCreatePeriod(ctx context.Context, year, month int) (*entity.Entity, error)
+	FindOrCreatePeriodsForYear(ctx context.Context, year int) ([]entity.Entity, error)
 	GetOrCreateSettings(ctx context.Context) (*entity.SettingsEntity, error)
 	UpdateSettings(ctx context.Context, s *entity.SettingsEntity) error
 	ListFiles(ctx context.Context, q PlanFileListQuery) ([]entity.PlanFileEntity, error)
+	ListFilesByPlanIDs(ctx context.Context, q PlanFileBatchListQuery) (map[int64][]entity.PlanFileEntity, error)
 	GetFileByID(ctx context.Context, id int64) (*entity.PlanFileEntity, error)
 	CreateFile(ctx context.Context, input PlanFileCreateInput) (*entity.PlanFileEntity, error)
 	SoftDeleteFile(ctx context.Context, input PlanFileSoftDeleteInput) error

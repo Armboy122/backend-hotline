@@ -45,6 +45,20 @@ The previous `internal/modules/<module>` direction is deprecated. Existing modul
 | 11 | [`runbook.md`](./runbook.md) | Runtime, migration, rollback, and troubleshooting notes |
 | 12 | [`98-session-log-2026-04-28.md`](./98-session-log-2026-04-28.md) | Previous session notes |
 | 13 | [`08-phase-a-wave-1-task-board.md`](./08-phase-a-wave-1-task-board.md) | Historical Wave 1 board |
+| 14 | [`09-product-prd-and-userflow-draft.md`](./09-product-prd-and-userflow-draft.md) | Product PRD and user flow draft for verification |
+| 15 | [`10-hotline-prd-latest-and-kanban-scope.md`](./10-hotline-prd-latest-and-kanban-scope.md) | Latest verified PRD, open questions, role model draft, and Kanban scope |
+| 16 | [`11-k0-decision-matrix.md`](./11-k0-decision-matrix.md) | K0 decision matrix: Q1-Q10 analysis, recommendations, blocking dependencies, role matrix draft |
+| 17 | [`12-performance-rbac-monthly-plan-replan.md`](./12-performance-rbac-monthly-plan-replan.md) | 2026-05-09 replan: performance-first, strict super_admin/admin split, and yearly monthly-plan flow |
+| 18 | [`performance-baseline-2026-05-09.md`](./performance-baseline-2026-05-09.md) | HP0 measured frontend/backend performance baseline |
+| 19 | [`performance-hp1-frontend-fixes-2026-05-09.md`](./performance-hp1-frontend-fixes-2026-05-09.md) | HP1 frontend performance fixes and measurements |
+| 20 | [`performance-backend-hp4b-2026-05-09.md`](./performance-backend-hp4b-2026-05-09.md) | HP4B backend/API bottleneck fixes and before/after timings |
+| 21 | [`13-work-planning-and-large-job-prd-discovery.md`](./13-work-planning-and-large-job-prd-discovery.md) | Discovery PRD for team plan, calendar, contact directory, and future `งานระดมทีม` |
+| 22 | [`14-session-handoff-2026-05-09.md`](./14-session-handoff-2026-05-09.md) | Handoff summary for the completed performance/RBAC/monthly-plan stabilization round |
+| 23 | [`15-team-plan-largework-implementation-plan.md`](./15-team-plan-largework-implementation-plan.md) | Implementation PRD for monthly-plan correction, team plan, calendar, contact directory, and `งานระดมทีม` |
+| 24 | [`16-planning-domain-api-contract.md`](./16-planning-domain-api-contract.md) | HNP-01 implementation-ready API/RBAC/DB/frontend DTO contract for team plan, calendar, contacts, daily-report prefill, and `งานระดมทีม` |
+| 25 | [`17-contact-directory-implementation.md`](./17-contact-directory-implementation.md) | HNX-01 implemented backend contact directory routes, contact fields, RBAC, and verification notes |
+| 26 | [`17-planning-frontend-ux-contract.md`](./17-planning-frontend-ux-contract.md) | HNP-02 frontend UX/RBAC/API integration contract for planning calendar, team plan, contacts, daily-report prefill, and `งานระดมทีม` |
+| 27 | [`18-hnq-final-release-readiness-and-handoff-2026-05-10.md`](./18-hnq-final-release-readiness-and-handoff-2026-05-10.md) | HNQ final release readiness and handoff report covering implemented flows, role matrix, gates, risks, and manual validation steps |
 
 ## Phase Progress
 

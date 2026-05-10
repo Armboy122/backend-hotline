@@ -49,6 +49,17 @@ func actorFromContext(c *gin.Context) (mpdomain.Actor, bool) {
 	}, true
 }
 
+func parseOptionalDate(raw *string) (*time.Time, error) {
+	if raw == nil || *raw == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse("2006-01-02", *raw)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
+}
+
 func toInt64(v interface{}) (int64, error) {
 	switch val := v.(type) {
 	case int:
@@ -94,6 +105,50 @@ func mapMPError(err error) int {
 }
 
 // ─── Period Endpoints ──────────────────────────────────────────────────────
+
+func (c *Controller) GetYearOverview(ctx *gin.Context) {
+	year, err := strconv.Atoi(ctx.Param("year"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("BAD_REQUEST", "Invalid year")})
+		return
+	}
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: errResp("UNAUTHORIZED", "Unauthorized")})
+		return
+	}
+	overview, err := c.service.GetYearOverview(ctx.Request.Context(), actor, year)
+	if err != nil {
+		ctx.JSON(mapMPError(err), dto.StandardResponse{Success: false, Error: errResp("ERROR", err.Error())})
+		return
+	}
+	months := make([]dto.MonthlyPlanOverviewMonthResponse, len(overview.Months))
+	for i, m := range overview.Months {
+		files := make([]dto.PlanFileResponse, len(m.Files))
+		for j, f := range m.Files {
+			files[j] = mapper.ToPlanFileResponse(f)
+		}
+		months[i] = dto.MonthlyPlanOverviewMonthResponse{
+			Period: dto.MonthlyPlanResponse{
+				ID:        m.Period.ID,
+				Year:      m.Period.Year,
+				Month:     m.Period.Month,
+				IsLocked:  m.IsLocked,
+				CreatedAt: m.Period.CreatedAt.Format(time.RFC3339),
+			},
+			Month:    m.Period.Month,
+			Deadline: m.Deadline,
+			IsLocked: m.IsLocked,
+			Status:   m.Status,
+			Actions:  dto.MonthlyPlanActionResponse{CanUpload: m.CanUpload},
+			Files:    files,
+		}
+	}
+	ctx.JSON(http.StatusOK, dto.StandardResponse{
+		Success: true,
+		Data:    dto.MonthlyPlanYearOverviewResponse{Year: overview.Year, Months: months},
+	})
+}
 
 func (c *Controller) GetOrCreatePeriod(ctx *gin.Context) {
 	year, err := strconv.Atoi(ctx.Param("year"))
@@ -194,6 +249,15 @@ func (c *Controller) PresignUpload(ctx *gin.Context) {
 		ctx.JSON(mapMPError(err), dto.StandardResponse{Success: false, Error: errResp("ERROR", err.Error())})
 		return
 	}
+	canUpload, _, err := c.service.CanUploadForPeriod(ctx.Request.Context(), actor, year, month)
+	if err != nil {
+		ctx.JSON(mapMPError(err), dto.StandardResponse{Success: false, Error: errResp("ERROR", err.Error())})
+		return
+	}
+	if !canUpload {
+		ctx.JSON(mapMPError(mpdomain.ErrPeriodLocked), dto.StandardResponse{Success: false, Error: errResp("ERROR", mpdomain.ErrPeriodLocked.Error())})
+		return
+	}
 
 	var req dto.PresignPlanFileRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -244,10 +308,30 @@ func (c *Controller) ConfirmUpload(ctx *gin.Context) {
 		ctx.JSON(mapMPError(err), dto.StandardResponse{Success: false, Error: errResp("ERROR", err.Error())})
 		return
 	}
+	canUpload, _, err := c.service.CanUploadForPeriod(ctx.Request.Context(), actor, year, month)
+	if err != nil {
+		ctx.JSON(mapMPError(err), dto.StandardResponse{Success: false, Error: errResp("ERROR", err.Error())})
+		return
+	}
+	if !canUpload {
+		ctx.JSON(mapMPError(mpdomain.ErrPeriodLocked), dto.StandardResponse{Success: false, Error: errResp("ERROR", mpdomain.ErrPeriodLocked.Error())})
+		return
+	}
 
 	var req dto.ConfirmPlanFileRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("BAD_REQUEST", "Invalid request body")})
+		return
+	}
+
+	workStartDate, err := parseOptionalDate(req.WorkStartDate)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("BAD_REQUEST", "workStartDate must be YYYY-MM-DD")})
+		return
+	}
+	workEndDate, err := parseOptionalDate(req.WorkEndDate)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("BAD_REQUEST", "workEndDate must be YYYY-MM-DD")})
 		return
 	}
 
@@ -260,6 +344,10 @@ func (c *Controller) ConfirmUpload(ctx *gin.Context) {
 		FileName:      req.FileName,
 		FileSizeBytes: req.FileSizeBytes,
 		Description:   req.Description,
+		WorkStartDate: workStartDate,
+		WorkEndDate:   workEndDate,
+		Destination:   req.Destination,
+		Remarks:       req.Remarks,
 		IsMasterPlan:  req.IsMasterPlan,
 	})
 	if err != nil {

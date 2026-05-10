@@ -64,6 +64,9 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("role", claims.Role)
+		if claims.TeamID != nil {
+			c.Set("team_id", *claims.TeamID)
+		}
 
 		c.Next()
 	}

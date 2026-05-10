@@ -250,6 +250,113 @@ func (Team) TableName() string {
 	return "Team"
 }
 
+const (
+	TeamPlanStatusPlanned   = "planned"
+	TeamPlanStatusCancelled = "cancelled"
+	TeamPlanStatusCompleted = "completed"
+
+	LargeWorkStatusDraft      = "draft"
+	LargeWorkStatusPlanned    = "planned"
+	LargeWorkStatusInProgress = "in_progress"
+	LargeWorkStatusCompleted  = "completed"
+	LargeWorkStatusCancelled  = "cancelled"
+
+	LargeWorkTeamRoleOwner       = "owner"
+	LargeWorkTeamRoleParticipant = "participant"
+
+	LargeWorkParticipantStatusAssigned     = "assigned"
+	LargeWorkParticipantStatusAcknowledged = "acknowledged"
+)
+
+// TeamPlan - แผนงานในพื้นที่รับผิดชอบของทีม
+// Additive planning table used as a source for the planning calendar.
+type TeamPlan struct {
+	ID                int64      `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	TeamID            int64      `gorm:"not null;column:team_id;index:idx_team_plans_team_start_date,priority:1" json:"teamId"`
+	CreatedByUserID   int64      `gorm:"not null;column:created_by_user_id;index:idx_team_plans_created_by" json:"createdByUserId"`
+	Title             string     `gorm:"not null;column:title" json:"title"`
+	WorkType          *string    `gorm:"column:work_type" json:"workType,omitempty"`
+	StartDate         time.Time  `gorm:"not null;type:date;column:start_date;index:idx_team_plans_team_start_date,priority:2;index:idx_team_plans_date_range,priority:1" json:"startDate"`
+	EndDate           *time.Time `gorm:"type:date;column:end_date;index:idx_team_plans_date_range,priority:2" json:"endDate,omitempty"`
+	WorkTime          *string    `gorm:"column:work_time" json:"workTime,omitempty"`
+	LocationText      string     `gorm:"not null;column:location_text" json:"locationText"`
+	PEAID             *int64     `gorm:"column:pea_id" json:"peaId,omitempty"`
+	OperationCenterID *int64     `gorm:"column:operation_center_id" json:"operationCenterId,omitempty"`
+	FeederID          *int64     `gorm:"column:feeder_id" json:"feederId,omitempty"`
+	StationID         *int64     `gorm:"column:station_id" json:"stationId,omitempty"`
+	Notes             *string    `gorm:"column:notes" json:"notes,omitempty"`
+	Status            string     `gorm:"not null;default:planned;column:status;index:idx_team_plans_status" json:"status"`
+	DailyTaskID       *int64     `gorm:"column:daily_task_id" json:"dailyTaskId,omitempty"`
+	CreatedAt         time.Time  `gorm:"not null;type:timestamptz(6);column:created_at;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt         time.Time  `gorm:"not null;type:timestamptz(6);column:updated_at" json:"updatedAt"`
+	DeletedAt         *time.Time `gorm:"type:timestamptz(6);column:deleted_at" json:"deletedAt,omitempty"`
+
+	Team            *Team            `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
+	CreatedBy       *User            `gorm:"foreignKey:CreatedByUserID;references:ID" json:"createdBy,omitempty"`
+	PEA             *PEA             `gorm:"foreignKey:PEAID;references:ID" json:"pea,omitempty"`
+	OperationCenter *OperationCenter `gorm:"foreignKey:OperationCenterID;references:ID" json:"operationCenter,omitempty"`
+	Feeder          *Feeder          `gorm:"foreignKey:FeederID;references:ID" json:"feeder,omitempty"`
+	Station         *Station         `gorm:"foreignKey:StationID;references:ID" json:"station,omitempty"`
+	DailyTask       *TaskDaily       `gorm:"foreignKey:DailyTaskID;references:ID" json:"dailyTask,omitempty"`
+}
+
+func (TeamPlan) TableName() string {
+	return "team_plans"
+}
+
+// LargeWorkItem - งานระดมทีมสำหรับงานขนาดใหญ่หลายทีม
+type LargeWorkItem struct {
+	ID                int64      `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	OwnerTeamID       int64      `gorm:"not null;column:owner_team_id;index:idx_large_work_items_owner_start_date,priority:1" json:"ownerTeamId"`
+	CreatedByUserID   int64      `gorm:"not null;column:created_by_user_id" json:"createdByUserId"`
+	Title             string     `gorm:"not null;column:title" json:"title"`
+	WorkType          *string    `gorm:"column:work_type" json:"workType,omitempty"`
+	StartDate         time.Time  `gorm:"not null;type:date;column:start_date;index:idx_large_work_items_owner_start_date,priority:2;index:idx_large_work_items_date_range,priority:1" json:"startDate"`
+	EndDate           *time.Time `gorm:"type:date;column:end_date;index:idx_large_work_items_date_range,priority:2" json:"endDate,omitempty"`
+	WorkTime          *string    `gorm:"column:work_time" json:"workTime,omitempty"`
+	LocationText      string     `gorm:"not null;column:location_text" json:"locationText"`
+	PEAID             *int64     `gorm:"column:pea_id" json:"peaId,omitempty"`
+	OperationCenterID *int64     `gorm:"column:operation_center_id" json:"operationCenterId,omitempty"`
+	FeederID          *int64     `gorm:"column:feeder_id" json:"feederId,omitempty"`
+	StationID         *int64     `gorm:"column:station_id" json:"stationId,omitempty"`
+	Notes             *string    `gorm:"column:notes" json:"notes,omitempty"`
+	Status            string     `gorm:"not null;default:planned;column:status;index:idx_large_work_items_status" json:"status"`
+	CreatedAt         time.Time  `gorm:"not null;type:timestamptz(6);column:created_at;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt         time.Time  `gorm:"not null;type:timestamptz(6);column:updated_at" json:"updatedAt"`
+	DeletedAt         *time.Time `gorm:"type:timestamptz(6);column:deleted_at" json:"deletedAt,omitempty"`
+
+	OwnerTeam       *Team               `gorm:"foreignKey:OwnerTeamID;references:ID" json:"ownerTeam,omitempty"`
+	CreatedBy       *User               `gorm:"foreignKey:CreatedByUserID;references:ID" json:"createdBy,omitempty"`
+	PEA             *PEA                `gorm:"foreignKey:PEAID;references:ID" json:"pea,omitempty"`
+	OperationCenter *OperationCenter    `gorm:"foreignKey:OperationCenterID;references:ID" json:"operationCenter,omitempty"`
+	Feeder          *Feeder             `gorm:"foreignKey:FeederID;references:ID" json:"feeder,omitempty"`
+	Station         *Station            `gorm:"foreignKey:StationID;references:ID" json:"station,omitempty"`
+	Teams           []LargeWorkItemTeam `gorm:"foreignKey:LargeWorkItemID" json:"teams,omitempty"`
+}
+
+func (LargeWorkItem) TableName() string {
+	return "large_work_items"
+}
+
+// LargeWorkItemTeam stores lead/participant teams for a งานระดมทีม item.
+type LargeWorkItemTeam struct {
+	LargeWorkItemID      int64      `gorm:"primaryKey;not null;column:large_work_item_id" json:"largeWorkItemId"`
+	TeamID               int64      `gorm:"primaryKey;not null;column:team_id;index:idx_large_work_item_teams_team" json:"teamId"`
+	Role                 string     `gorm:"not null;column:role" json:"role"`
+	ParticipantStatus    string     `gorm:"not null;default:assigned;column:participant_status" json:"participantStatus"`
+	AcknowledgedByUserID *int64     `gorm:"column:acknowledged_by_user_id" json:"acknowledgedByUserId,omitempty"`
+	AcknowledgedAt       *time.Time `gorm:"type:timestamptz(6);column:acknowledged_at" json:"acknowledgedAt,omitempty"`
+	CreatedAt            time.Time  `gorm:"not null;type:timestamptz(6);column:created_at;default:CURRENT_TIMESTAMP" json:"createdAt"`
+
+	LargeWorkItem  *LargeWorkItem `gorm:"foreignKey:LargeWorkItemID;references:ID" json:"largeWorkItem,omitempty"`
+	Team           *Team          `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
+	AcknowledgedBy *User          `gorm:"foreignKey:AcknowledgedByUserID;references:ID" json:"acknowledgedBy,omitempty"`
+}
+
+func (LargeWorkItemTeam) TableName() string {
+	return "large_work_item_teams"
+}
+
 // TaskDaily - รายงานประจำวัน
 type TaskDaily struct {
 	ID          int64            `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
@@ -282,16 +389,19 @@ func (TaskDaily) TableName() string {
 
 // User - ผู้ใช้งานระบบ
 type User struct {
-	ID        uint       `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
-	Username  string     `gorm:"not null;unique;column:username" json:"username"`
-	Password  string     `gorm:"not null;column:password" json:"-"`
-	Role      string     `gorm:"not null;default:user;column:role" json:"role"`
-	TeamID    *int64     `gorm:"column:teamId;index:User_teamId_idx" json:"teamId,omitempty"`
-	IsActive  bool       `gorm:"not null;default:true;column:isActive" json:"isActive"`
-	LastLogin *time.Time `gorm:"column:lastLogin" json:"lastLogin,omitempty"`
-	CreatedAt time.Time  `gorm:"not null;type:timestamptz(6);column:createdAt;default:CURRENT_TIMESTAMP" json:"createdAt"`
-	UpdatedAt time.Time  `gorm:"not null;type:timestamptz(6);column:updatedAt" json:"updatedAt"`
-	DeletedAt *time.Time `gorm:"type:timestamptz(6);column:deletedAt" json:"deletedAt,omitempty"`
+	ID          uint       `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	Username    string     `gorm:"not null;unique;column:username" json:"username"`
+	Password    string     `gorm:"not null;column:password" json:"-"`
+	Role        string     `gorm:"not null;default:user;column:role" json:"role"`
+	TeamID      *int64     `gorm:"column:teamId;index:User_teamId_idx" json:"teamId,omitempty"`
+	DisplayName *string    `gorm:"column:displayName" json:"displayName,omitempty"`
+	Position    *string    `gorm:"column:position" json:"position,omitempty"`
+	PhoneNumber *string    `gorm:"column:phoneNumber" json:"phoneNumber,omitempty"`
+	IsActive    bool       `gorm:"not null;default:true;column:isActive" json:"isActive"`
+	LastLogin   *time.Time `gorm:"column:lastLogin" json:"lastLogin,omitempty"`
+	CreatedAt   time.Time  `gorm:"not null;type:timestamptz(6);column:createdAt;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt   time.Time  `gorm:"not null;type:timestamptz(6);column:updatedAt" json:"updatedAt"`
+	DeletedAt   *time.Time `gorm:"type:timestamptz(6);column:deletedAt" json:"deletedAt,omitempty"`
 
 	Team *Team `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
 }
@@ -328,6 +438,10 @@ type PlanFile struct {
 	FileName      string     `gorm:"not null;column:fileName" json:"fileName"`
 	FileSizeBytes int64      `gorm:"not null;default:0;column:fileSizeBytes" json:"fileSizeBytes"`
 	Description   *string    `gorm:"column:description" json:"description,omitempty"`
+	WorkStartDate *time.Time `gorm:"type:date;column:workStartDate" json:"workStartDate,omitempty"`
+	WorkEndDate   *time.Time `gorm:"type:date;column:workEndDate" json:"workEndDate,omitempty"`
+	Destination   *string    `gorm:"column:destination" json:"destination,omitempty"`
+	Remarks       *string    `gorm:"column:remarks" json:"remarks,omitempty"`
 	IsMasterPlan  bool       `gorm:"not null;default:false;column:isMasterPlan" json:"isMasterPlan"`
 	IsDeleted     bool       `gorm:"not null;default:false;column:isDeleted" json:"isDeleted"`
 	DeletedAt     *time.Time `gorm:"type:timestamptz(6);column:deletedAt" json:"deletedAt,omitempty"`

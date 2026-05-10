@@ -69,8 +69,20 @@ Common settings to verify:
 
 ## Smoke command
 
-`scripts/smoke.sh` now checks health, optional login, `/v1/auth/me`, `/v1/tasks`, `/v1/monthly-plans/:year/:month`, and dashboard summary.
+`./scripts/smoke.sh` checks health, login/refresh/me, user management access, task list/filter access, monthly-plan period/files/status/settings, and dashboard summary/top/stats endpoints. It prints a pass/fail/skip summary and exits non-zero if any checked endpoint fails.
 
 ```bash
-BASE_URL=http://localhost:8080 USERNAME=admin PASSWORD=secret scripts/smoke.sh
+BASE_URL=http://localhost:8080 USERNAME=admin PASSWORD=secret TEAM_ID=1 ./scripts/smoke.sh
 ```
+
+Run static smoke-script regression checks before release:
+
+```bash
+bash scripts/test_smoke.sh
+```
+
+If `USERNAME` and `PASSWORD` are not provided, authenticated checks are skipped. A release candidate is not fully smoke-tested until authenticated checks pass against a seeded target environment.
+
+## K5 frontend smoke checklist
+
+Use `plan/k5-release-readiness-report.md` for the browser checklist covering login/session restore, daily task creation/listing, monthly plan submission/admin review, and admin user-management role restrictions.

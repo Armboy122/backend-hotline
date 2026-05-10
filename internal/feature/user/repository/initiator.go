@@ -19,6 +19,10 @@ type Repository interface {
 	Delete(ctx context.Context, id uint) error
 	GetPasswordHash(ctx context.Context, id uint) (string, error)
 	UpdatePassword(ctx context.Context, id uint, hashed string) error
+	CountActiveSuperAdmins(ctx context.Context, excludeID *uint) (int64, error)
+	ListContacts(ctx context.Context, q entity.ContactListQuery) ([]entity.ContactInfo, int64, error)
+	GetContactByID(ctx context.Context, id uint) (entity.ContactInfo, error)
+	UpdateContact(ctx context.Context, id uint, in entity.UpdateContactInput) (entity.ContactInfo, error)
 }
 
 type repository struct {
@@ -34,15 +38,40 @@ func toInfo(m models.User) entity.UserInfo {
 	if m.LastLogin != nil {
 		lastLogin = m.LastLogin.Format(time.RFC3339)
 	}
-	return entity.UserInfo{
-		ID:        m.ID,
-		Username:  m.Username,
-		Role:      m.Role,
-		TeamID:    m.TeamID,
-		IsActive:  m.IsActive,
-		LastLogin: &lastLogin,
-		CreatedAt: m.CreatedAt.Format(time.RFC3339),
+	info := entity.UserInfo{
+		ID:          m.ID,
+		Username:    m.Username,
+		Role:        m.Role,
+		TeamID:      m.TeamID,
+		DisplayName: m.DisplayName,
+		Position:    m.Position,
+		PhoneNumber: m.PhoneNumber,
+		IsActive:    m.IsActive,
+		LastLogin:   &lastLogin,
+		CreatedAt:   m.CreatedAt.Format(time.RFC3339),
 	}
+	if m.Team != nil {
+		info.Team = &entity.TeamInfo{ID: m.Team.ID, Name: m.Team.Name}
+	}
+	return info
+}
+
+func toContactInfo(m models.User) entity.ContactInfo {
+	info := entity.ContactInfo{
+		ID:          m.ID,
+		Username:    m.Username,
+		DisplayName: m.DisplayName,
+		Position:    m.Position,
+		PhoneNumber: m.PhoneNumber,
+		Role:        m.Role,
+		TeamID:      m.TeamID,
+		IsActive:    m.IsActive,
+		UpdatedAt:   m.UpdatedAt.Format(time.RFC3339),
+	}
+	if m.Team != nil {
+		info.Team = &entity.TeamInfo{ID: m.Team.ID, Name: m.Team.Name}
+	}
+	return info
 }
 
 func (r *repository) List(ctx context.Context, page, limit int) ([]entity.UserInfo, int64, error) {
@@ -143,4 +172,83 @@ func (r *repository) GetPasswordHash(ctx context.Context, id uint) (string, erro
 
 func (r *repository) UpdatePassword(ctx context.Context, id uint, hashed string) error {
 	return r.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", id).Update("password", hashed).Error
+}
+
+func (r *repository) CountActiveSuperAdmins(ctx context.Context, excludeID *uint) (int64, error) {
+	query := r.db.WithContext(ctx).Model(&models.User{}).
+		Scopes(models.UserNotDeleted).
+		Where("role = ? AND \"isActive\" = ?", "super_admin", true)
+	if excludeID != nil {
+		query = query.Where("id <> ?", *excludeID)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *repository) ListContacts(ctx context.Context, q entity.ContactListQuery) ([]entity.ContactInfo, int64, error) {
+	base := r.db.WithContext(ctx).Model(&models.User{}).Scopes(models.UserNotDeleted)
+	if !q.IncludeInactive {
+		base = base.Where(`"isActive" = ?`, true)
+	}
+	if q.TeamID != nil {
+		base = base.Where(`"teamId" = ?`, *q.TeamID)
+	}
+	if q.Role != "" {
+		base = base.Where("role = ?", q.Role)
+	}
+	if q.Query != "" {
+		like := "%" + q.Query + "%"
+		base = base.Where(`username ILIKE ? OR "displayName" ILIKE ? OR position ILIKE ? OR "phoneNumber" ILIKE ?`, like, like, like, like)
+	}
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var items []models.User
+	if err := base.Preload("Team").Order(`"isActive" DESC, "displayName" ASC NULLS LAST, username ASC`).Offset((q.Page - 1) * q.Limit).Limit(q.Limit).Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	out := make([]entity.ContactInfo, 0, len(items))
+	for _, item := range items {
+		out = append(out, toContactInfo(item))
+	}
+	return out, total, nil
+}
+
+func (r *repository) GetContactByID(ctx context.Context, id uint) (entity.ContactInfo, error) {
+	var m models.User
+	if err := r.db.WithContext(ctx).Scopes(models.UserNotDeleted).Preload("Team").First(&m, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return entity.ContactInfo{}, entity.ErrNotFound
+		}
+		return entity.ContactInfo{}, err
+	}
+	return toContactInfo(m), nil
+}
+
+func (r *repository) UpdateContact(ctx context.Context, id uint, in entity.UpdateContactInput) (entity.ContactInfo, error) {
+	updates := map[string]interface{}{}
+	if in.DisplayName != nil {
+		updates["displayName"] = *in.DisplayName
+	}
+	if in.Position != nil {
+		updates["position"] = *in.Position
+	}
+	if in.PhoneNumber != nil {
+		updates["phoneNumber"] = *in.PhoneNumber
+	}
+	if len(updates) > 0 {
+		updates["updatedAt"] = time.Now()
+	}
+	result := r.db.WithContext(ctx).Model(&models.User{}).Scopes(models.UserNotDeleted).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return entity.ContactInfo{}, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return entity.ContactInfo{}, entity.ErrNotFound
+	}
+	return r.GetContactByID(ctx, id)
 }

@@ -3,20 +3,40 @@ package entity
 import "errors"
 
 var (
-	ErrNotFound         = errors.New("user not found")
-	ErrInvalidID        = errors.New("invalid user id")
-	ErrCannotDeleteSelf = errors.New("cannot delete own account")
-	ErrInvalidPassword  = errors.New("old password is incorrect")
+	ErrNotFound                   = errors.New("user not found")
+	ErrInvalidID                  = errors.New("invalid user id")
+	ErrCannotDeleteSelf           = errors.New("cannot delete own account")
+	ErrInvalidPassword            = errors.New("old password is incorrect")
+	ErrForbidden                  = errors.New("forbidden")
+	ErrInvalidRole                = errors.New("invalid role")
+	ErrSuperAdminAlreadyExists    = errors.New("active super admin already exists")
+	ErrCannotRemoveOnlySuperAdmin = errors.New("cannot remove only active super admin")
+	ErrNoContactFields            = errors.New("no contact fields provided")
+	ErrInvalidContactField        = errors.New("invalid contact field")
 )
 
+type Actor struct {
+	ID   uint
+	Role string
+}
+
+type TeamInfo struct {
+	ID   int64
+	Name string
+}
+
 type UserInfo struct {
-	ID        uint
-	Username  string
-	Role      string
-	TeamID    *int64
-	IsActive  bool
-	LastLogin *string
-	CreatedAt string
+	ID          uint
+	Username    string
+	Role        string
+	TeamID      *int64
+	Team        *TeamInfo
+	DisplayName *string
+	Position    *string
+	PhoneNumber *string
+	IsActive    bool
+	LastLogin   *string
+	CreatedAt   string
 }
 
 type ListResult struct {
@@ -41,4 +61,39 @@ type UpdateInput struct {
 	Role     *string
 	TeamID   *int64
 	IsActive *bool
+}
+
+type ContactInfo struct {
+	ID          uint
+	Username    string
+	DisplayName *string
+	Position    *string
+	PhoneNumber *string
+	Role        string
+	TeamID      *int64
+	Team        *TeamInfo
+	IsActive    bool
+	UpdatedAt   string
+}
+
+type ContactListQuery struct {
+	Query           string
+	TeamID          *int64
+	Role            string
+	IncludeInactive bool
+	Page            int
+	Limit           int
+}
+
+type ContactListResult struct {
+	Items []ContactInfo
+	Total int64
+	Page  int
+	Limit int
+}
+
+type UpdateContactInput struct {
+	DisplayName *string
+	Position    *string
+	PhoneNumber *string
 }

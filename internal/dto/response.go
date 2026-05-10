@@ -309,32 +309,65 @@ type RefreshResponse struct {
 }
 
 type UserResponse struct {
-	ID        uint    `json:"id"`
-	Username  string  `json:"username"`
-	Role      string  `json:"role"`
-	TeamID    *int64  `json:"teamId,omitempty"`
-	IsActive  bool    `json:"isActive"`
-	LastLogin *string `json:"lastLogin,omitempty"`
-	CreatedAt string  `json:"createdAt"`
+	ID          uint        `json:"id"`
+	Username    string      `json:"username"`
+	Role        string      `json:"role"`
+	TeamID      *int64      `json:"teamId,omitempty"`
+	Team        *TeamNested `json:"team,omitempty"`
+	DisplayName *string     `json:"displayName,omitempty"`
+	Position    *string     `json:"position,omitempty"`
+	PhoneNumber *string     `json:"phoneNumber,omitempty"`
+	IsActive    bool        `json:"isActive"`
+	LastLogin   *string     `json:"lastLogin,omitempty"`
+	CreatedAt   string      `json:"createdAt"`
+}
+
+type ContactDirectoryActions struct {
+	CanEdit           bool `json:"canEdit"`
+	CanEditRoleOrTeam bool `json:"canEditRoleOrTeam"`
+}
+
+type ContactDirectoryResponse struct {
+	ID          uint                    `json:"id"`
+	Username    string                  `json:"username"`
+	DisplayName *string                 `json:"displayName"`
+	Position    *string                 `json:"position"`
+	PhoneNumber *string                 `json:"phoneNumber"`
+	Role        string                  `json:"role"`
+	TeamID      *int64                  `json:"teamId"`
+	Team        *TeamNested             `json:"team,omitempty"`
+	IsActive    bool                    `json:"isActive"`
+	Actions     ContactDirectoryActions `json:"actions"`
+	UpdatedAt   string                  `json:"updatedAt"`
 }
 
 type CreateUserRequest struct {
 	Username string `json:"username" binding:"required,len=6,numeric"`
 	Password string `json:"password" binding:"required,min=6"`
-	Role     string `json:"role" binding:"required,oneof=admin user viewer"`
+	Role     string `json:"role" binding:"required,oneof=super_admin admin team_lead user viewer"`
 	TeamID   *int64 `json:"teamId"`
 	IsActive *bool  `json:"isActive"`
 }
 
 type UpdateUserRequest struct {
 	Username *string `json:"username" binding:"omitempty,len=6,numeric"`
-	Role     *string `json:"role" binding:"omitempty,oneof=admin user viewer"`
+	Role     *string `json:"role" binding:"omitempty,oneof=super_admin admin team_lead user viewer"`
 	TeamID   *int64  `json:"teamId"`
 	IsActive *bool   `json:"isActive"`
 }
 
+type UpdateContactRequest struct {
+	DisplayName *string `json:"displayName" binding:"omitempty,max=120"`
+	Position    *string `json:"position" binding:"omitempty,max=120"`
+	PhoneNumber *string `json:"phoneNumber" binding:"omitempty,max=40"`
+}
+
 type ChangePasswordRequest struct {
 	OldPassword string `json:"oldPassword" binding:"required"`
+	NewPassword string `json:"newPassword" binding:"required,min=6"`
+}
+
+type ResetPasswordRequest struct {
 	NewPassword string `json:"newPassword" binding:"required,min=6"`
 }
 
@@ -366,6 +399,10 @@ type PlanFileResponse struct {
 	FileName      string                  `json:"fileName"`
 	FileSizeBytes int64                   `json:"fileSizeBytes"`
 	Description   *string                 `json:"description"`
+	WorkStartDate *string                 `json:"workStartDate"`
+	WorkEndDate   *string                 `json:"workEndDate"`
+	Destination   *string                 `json:"destination"`
+	Remarks       *string                 `json:"remarks"`
 	IsMasterPlan  bool                    `json:"isMasterPlan"`
 	IsDeleted     bool                    `json:"isDeleted"`
 	DeletedAt     *string                 `json:"deletedAt"`
@@ -388,6 +425,10 @@ type ConfirmPlanFileRequest struct {
 	FileName      string  `json:"fileName" binding:"required"`
 	FileSizeBytes int64   `json:"fileSizeBytes" binding:"required,min=1"`
 	Description   *string `json:"description"`
+	WorkStartDate *string `json:"workStartDate"`
+	WorkEndDate   *string `json:"workEndDate"`
+	Destination   *string `json:"destination"`
+	Remarks       *string `json:"remarks"`
 	IsMasterPlan  bool    `json:"isMasterPlan"`
 	// TeamID — optional, admin เท่านั้นที่ระบุได้ เพื่ออัพโหลดแทนทีมอื่น
 	// ถ้าไม่ส่งมา → ใช้ teamId ของ user ที่ login
@@ -407,6 +448,28 @@ type SubmissionStatusResponse struct {
 	Period   MonthlyPlanResponse    `json:"period"`
 	Deadline string                 `json:"deadline"` // YYYY-MM-DD
 	Teams    []TeamSubmissionStatus `json:"teams"`
+}
+
+// MonthlyPlanActionResponse — actor-specific available actions for one month.
+type MonthlyPlanActionResponse struct {
+	CanUpload bool `json:"canUpload"`
+}
+
+// MonthlyPlanOverviewMonthResponse — yearly overview entry for one month.
+type MonthlyPlanOverviewMonthResponse struct {
+	Period   MonthlyPlanResponse       `json:"period"`
+	Month    int                       `json:"month"`
+	Deadline string                    `json:"deadline"`
+	IsLocked bool                      `json:"isLocked"`
+	Status   string                    `json:"status"`
+	Actions  MonthlyPlanActionResponse `json:"actions"`
+	Files    []PlanFileResponse        `json:"files"`
+}
+
+// MonthlyPlanYearOverviewResponse — all 12 monthly plan buckets for a year.
+type MonthlyPlanYearOverviewResponse struct {
+	Year   int                                `json:"year"`
+	Months []MonthlyPlanOverviewMonthResponse `json:"months"`
 }
 
 // MonthlyPlanSettingsResponse — response สำหรับ GET settings

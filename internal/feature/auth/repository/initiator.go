@@ -68,7 +68,7 @@ func (r *repository) FindByID(ctx context.Context, id uint) (*entity.AuthUser, e
 
 func (r *repository) FindByIDWithTeam(ctx context.Context, id uint) (entity.UserInfo, error) {
 	var m models.User
-	if err := r.db.WithContext(ctx).Preload("Team").First(&m, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&m, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return entity.UserInfo{}, entity.ErrUserNotFound
 		}

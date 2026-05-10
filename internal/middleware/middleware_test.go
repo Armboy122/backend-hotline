@@ -43,6 +43,29 @@ func TestCachePublicSetsHeader(t *testing.T) {
 	}
 }
 
+func TestCachePublicCachesSuccessfulGETResponses(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	calls := 0
+	r.GET("/cache", CachePublic(120), func(c *gin.Context) {
+		calls++
+		c.JSON(http.StatusOK, gin.H{"calls": calls})
+	})
+
+	first := performRequest(t, r, http.MethodGet, "/cache", nil, nil)
+	second := performRequest(t, r, http.MethodGet, "/cache", nil, nil)
+
+	if first.Code != http.StatusOK || second.Code != http.StatusOK {
+		t.Fatalf("statuses = %d/%d, want 200/200", first.Code, second.Code)
+	}
+	if calls != 1 {
+		t.Fatalf("handler calls = %d, want 1 cached backend execution", calls)
+	}
+	if first.Body.String() != second.Body.String() {
+		t.Fatalf("cached response body changed: first=%q second=%q", first.Body.String(), second.Body.String())
+	}
+}
+
 func TestCachePrivateSetsHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -53,6 +76,35 @@ func TestCachePrivateSetsHeader(t *testing.T) {
 	rec := performRequest(t, r, http.MethodGet, "/cache", nil, nil)
 	if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
 		t.Fatalf("Cache-Control = %q, want private, no-store", got)
+	}
+}
+
+func TestCachePrivateCanCacheGETResponsesByUserContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	calls := 0
+	r.GET("/dashboard", func(c *gin.Context) {
+		c.Set("user_id", uint(7))
+		c.Set("role", "super_admin")
+	}, CachePrivate(60), func(c *gin.Context) {
+		calls++
+		c.JSON(http.StatusOK, gin.H{"calls": calls})
+	})
+
+	first := performRequest(t, r, http.MethodGet, "/dashboard?year=2026", nil, nil)
+	second := performRequest(t, r, http.MethodGet, "/dashboard?year=2026", nil, nil)
+
+	if first.Code != http.StatusOK || second.Code != http.StatusOK {
+		t.Fatalf("statuses = %d/%d, want 200/200", first.Code, second.Code)
+	}
+	if calls != 1 {
+		t.Fatalf("handler calls = %d, want 1 cached private execution", calls)
+	}
+	if first.Body.String() != second.Body.String() {
+		t.Fatalf("cached response body changed: first=%q second=%q", first.Body.String(), second.Body.String())
+	}
+	if got := second.Header().Get("Cache-Control"); got != "private, max-age=60" {
+		t.Fatalf("Cache-Control = %q, want private, max-age=60", got)
 	}
 }
 
@@ -81,7 +133,7 @@ func TestRecoveryMiddlewareReturnsStandardError(t *testing.T) {
 	}
 }
 
-func TestTimeoutMiddlewareReturnsGatewayTimeout(t *testing.T) {
+func TestTimeoutMiddlewarePropagatesDeadlineWithoutConcurrentGinWrites(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(TimeoutMiddleware(10 * time.Millisecond))
@@ -90,27 +142,21 @@ func TestTimeoutMiddlewareReturnsGatewayTimeout(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		case <-c.Request.Context().Done():
+			c.Status(http.StatusNoContent)
 		}
 	})
 
 	rec := performRequest(t, r, http.MethodGet, "/slow", nil, nil)
-	if rec.Code != http.StatusGatewayTimeout {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusGatewayTimeout)
-	}
-
-	var resp dto.StandardResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if resp.Error == nil || resp.Error.Code != "REQUEST_TIMEOUT" {
-		t.Fatalf("Error = %#v, want REQUEST_TIMEOUT", resp.Error)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d body=%s, want handler-controlled timeout response", rec.Code, rec.Body.String())
 	}
 }
 
 func TestRequireAuthAllowsValidTokenAndSetsClaims(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	jwtManager := jwt.NewJWTManager("secret", time.Hour, 24*time.Hour)
-	accessToken, _, err := jwtManager.GenerateTokenPair(42, "alice", "admin")
+	teamID := int64(7)
+	accessToken, _, err := jwtManager.GenerateTokenPair(42, "alice", "team_lead", &teamID)
 	if err != nil {
 		t.Fatalf("GenerateTokenPair: %v", err)
 	}
@@ -124,8 +170,11 @@ func TestRequireAuthAllowsValidTokenAndSetsClaims(t *testing.T) {
 		if got, ok := c.Get("username"); !ok || got.(string) != "alice" {
 			t.Fatalf("username = %#v, want alice", got)
 		}
-		if got, ok := c.Get("role"); !ok || got.(string) != "admin" {
-			t.Fatalf("role = %#v, want admin", got)
+		if got, ok := c.Get("role"); !ok || got.(string) != "team_lead" {
+			t.Fatalf("role = %#v, want team_lead", got)
+		}
+		if got, ok := c.Get("team_id"); !ok || got.(int64) != teamID {
+			t.Fatalf("team_id = %#v, want %d", got, teamID)
 		}
 		c.Status(http.StatusNoContent)
 	})

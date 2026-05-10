@@ -7,6 +7,7 @@ import (
 	"time"
 
 	taskdto "backend-hotlines3/internal/feature/task/dto"
+	taskentity "backend-hotlines3/internal/feature/task/entity"
 	"backend-hotlines3/internal/feature/task/mapper"
 	taskrepository "backend-hotlines3/internal/feature/task/repository"
 	taskservice "backend-hotlines3/internal/feature/task/service"
@@ -33,7 +34,67 @@ func isValidationError(err error) bool {
 		errors.Is(err, taskservice.ErrYearMonthRequired)
 }
 
+func actorFromContext(ctx *gin.Context) (taskentity.Actor, bool) {
+	uidVal, ok := ctx.Get("user_id")
+	if !ok {
+		return taskentity.Actor{}, false
+	}
+	roleVal, _ := ctx.Get("role")
+	uid, ok := uidVal.(uint)
+	if !ok {
+		return taskentity.Actor{}, false
+	}
+	role, _ := roleVal.(string)
+	var teamID *int64
+	if rawTeamID, exists := ctx.Get("team_id"); exists {
+		switch v := rawTeamID.(type) {
+		case int64:
+			teamID = &v
+		case int:
+			id := int64(v)
+			teamID = &id
+		case uint:
+			id := int64(v)
+			teamID = &id
+		case float64:
+			id := int64(v)
+			teamID = &id
+		}
+	}
+	return taskentity.Actor{UserID: int64(uid), Role: role, TeamID: teamID}, true
+}
+
+func requireActor(ctx *gin.Context) (taskentity.Actor, bool) {
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, taskdto.StandardResponse{
+			Success: false,
+			Error:   &taskdto.ErrorInfo{Code: "UNAUTHORIZED", Message: "Unauthorized"},
+		})
+		return taskentity.Actor{}, false
+	}
+	return actor, true
+}
+
+func mapTaskErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, taskservice.ErrTaskNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, taskservice.ErrForbidden):
+		return http.StatusForbidden
+	case isValidationError(err):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
 func (c *controller) List(ctx *gin.Context) {
+	actor, ok := requireActor(ctx)
+	if !ok {
+		return
+	}
+
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
 
@@ -55,7 +116,7 @@ func (c *controller) List(ctx *gin.Context) {
 		filter.FeederID = &id
 	}
 
-	result, err := c.service.List(ctx.Request.Context(), taskservice.ListTasksInput{
+	result, err := c.service.List(ctx.Request.Context(), actor, taskservice.ListTasksInput{
 		Page:   page,
 		Limit:  limit,
 		Filter: filter,
@@ -81,6 +142,11 @@ func (c *controller) List(ctx *gin.Context) {
 }
 
 func (c *controller) GetByID(ctx *gin.Context) {
+	actor, ok := requireActor(ctx)
+	if !ok {
+		return
+	}
+
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, taskdto.StandardResponse{
@@ -90,7 +156,7 @@ func (c *controller) GetByID(ctx *gin.Context) {
 		return
 	}
 
-	task, err := c.service.GetByID(ctx.Request.Context(), id)
+	task, err := c.service.GetByID(ctx.Request.Context(), actor, id)
 	if err != nil {
 		if errors.Is(err, taskservice.ErrTaskNotFound) {
 			ctx.JSON(http.StatusNotFound, taskdto.StandardResponse{
@@ -117,6 +183,11 @@ func (c *controller) GetByID(ctx *gin.Context) {
 }
 
 func (c *controller) Create(ctx *gin.Context) {
+	actor, ok := requireActor(ctx)
+	if !ok {
+		return
+	}
+
 	var req taskdto.CreateTaskRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, taskdto.StandardResponse{
@@ -135,7 +206,7 @@ func (c *controller) Create(ctx *gin.Context) {
 		return
 	}
 
-	task, err := c.service.Create(ctx.Request.Context(), taskservice.CreateTaskInput{
+	task, err := c.service.Create(ctx.Request.Context(), actor, taskservice.CreateTaskInput{
 		WorkDate:    workDate,
 		TeamID:      req.TeamID,
 		JobTypeID:   req.JobTypeID,
@@ -157,6 +228,13 @@ func (c *controller) Create(ctx *gin.Context) {
 			})
 			return
 		}
+		if errors.Is(err, taskservice.ErrForbidden) {
+			ctx.JSON(http.StatusForbidden, taskdto.StandardResponse{
+				Success: false,
+				Error:   &taskdto.ErrorInfo{Code: "FORBIDDEN", Message: err.Error()},
+			})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, taskdto.StandardResponse{
 			Success: false,
 			Error:   &taskdto.ErrorInfo{Code: "INTERNAL_ERROR", Message: err.Error()},
@@ -168,6 +246,11 @@ func (c *controller) Create(ctx *gin.Context) {
 }
 
 func (c *controller) Update(ctx *gin.Context) {
+	actor, ok := requireActor(ctx)
+	if !ok {
+		return
+	}
+
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, taskdto.StandardResponse{
@@ -218,7 +301,7 @@ func (c *controller) Update(ctx *gin.Context) {
 		input.JobDetailID = req.JobDetailID
 	}
 
-	task, err := c.service.Update(ctx.Request.Context(), input)
+	task, err := c.service.Update(ctx.Request.Context(), actor, input)
 	if err != nil {
 		if errors.Is(err, taskservice.ErrTaskNotFound) {
 			ctx.JSON(http.StatusNotFound, taskdto.StandardResponse{
@@ -245,6 +328,11 @@ func (c *controller) Update(ctx *gin.Context) {
 }
 
 func (c *controller) Delete(ctx *gin.Context) {
+	actor, ok := requireActor(ctx)
+	if !ok {
+		return
+	}
+
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, taskdto.StandardResponse{
@@ -254,7 +342,7 @@ func (c *controller) Delete(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.service.Delete(ctx.Request.Context(), id); err != nil {
+	if err := c.service.Delete(ctx.Request.Context(), actor, id); err != nil {
 		if errors.Is(err, taskservice.ErrInvalidTaskID) {
 			ctx.JSON(http.StatusBadRequest, taskdto.StandardResponse{
 				Success: false,
@@ -273,7 +361,12 @@ func (c *controller) Delete(ctx *gin.Context) {
 }
 
 func (c *controller) ListByFilter(ctx *gin.Context) {
-	result, err := c.service.ListByFilter(ctx.Request.Context(), taskservice.ListTasksByFilterInput{
+	actor, ok := requireActor(ctx)
+	if !ok {
+		return
+	}
+
+	result, err := c.service.ListByFilter(ctx.Request.Context(), actor, taskservice.ListTasksByFilterInput{
 		Year:  ctx.Query("year"),
 		Month: ctx.Query("month"),
 	})
@@ -296,6 +389,11 @@ func (c *controller) ListByFilter(ctx *gin.Context) {
 }
 
 func (c *controller) ListByTeam(ctx *gin.Context) {
+	actor, ok := requireActor(ctx)
+	if !ok {
+		return
+	}
+
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "100"))
 
@@ -317,7 +415,7 @@ func (c *controller) ListByTeam(ctx *gin.Context) {
 		input.FeederID = &id
 	}
 
-	result, err := c.service.ListByTeam(ctx.Request.Context(), input)
+	result, err := c.service.ListByTeam(ctx.Request.Context(), actor, input)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, taskdto.StandardResponse{
 			Success: false,

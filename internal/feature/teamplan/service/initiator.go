@@ -1,0 +1,243 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"time"
+
+	"backend-hotlines3/internal/feature/teamplan/entity"
+	"backend-hotlines3/internal/feature/teamplan/repository"
+)
+
+var (
+	ErrInvalidTeamPlanID = entity.ErrInvalidID
+)
+
+type ListInput struct {
+	From   time.Time
+	To     time.Time
+	TeamID *int64
+	Status []string
+	Page   int
+	Limit  int
+}
+
+type ListOutput struct {
+	Items []entity.TeamPlan
+	Total int64
+	Page  int
+	Limit int
+}
+
+type CreateInput struct {
+	TeamID            int64
+	Title             string
+	WorkType          *string
+	StartDate         time.Time
+	EndDate           *time.Time
+	WorkTime          *string
+	LocationText      string
+	PEAID             *int64
+	OperationCenterID *int64
+	FeederID          *int64
+	StationID         *int64
+	Notes             *string
+}
+
+type UpdateInput struct {
+	ID                int64
+	TeamID            *int64
+	Title             *string
+	WorkType          *string
+	StartDate         *time.Time
+	EndDate           *time.Time
+	WorkTime          *string
+	LocationText      *string
+	PEAID             *int64
+	OperationCenterID *int64
+	FeederID          *int64
+	StationID         *int64
+	Notes             *string
+	Status            *string
+}
+
+type Service struct {
+	repo repository.Repository
+}
+
+func NewService(repo repository.Repository) *Service {
+	return &Service{repo: repo}
+}
+
+func (s *Service) List(ctx context.Context, _ entity.Actor, input ListInput) (*ListOutput, error) {
+	if input.From.IsZero() || input.To.IsZero() {
+		return nil, entity.ErrInvalidRange
+	}
+	from := dateOnly(input.From)
+	to := dateOnly(input.To)
+	if to.Before(from) {
+		return nil, entity.ErrInvalidRange
+	}
+	page := normalizePage(input.Page)
+	limit := normalizeLimit(input.Limit)
+	items, total, err := s.repo.List(ctx, repository.ListQuery{
+		From:   from,
+		To:     to,
+		TeamID: input.TeamID,
+		Status: input.Status,
+		Page:   page,
+		Limit:  limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ListOutput{Items: items, Total: total, Page: page, Limit: limit}, nil
+}
+
+func (s *Service) GetByID(ctx context.Context, _ entity.Actor, id int64) (*entity.TeamPlan, error) {
+	if id <= 0 {
+		return nil, entity.ErrInvalidID
+	}
+	item, err := s.repo.GetByID(ctx, repository.GetQuery{ID: id})
+	if err != nil {
+		return nil, err
+	}
+	if item == nil {
+		return nil, entity.ErrNotFound
+	}
+	return item, nil
+}
+
+func (s *Service) Create(ctx context.Context, actor entity.Actor, input CreateInput) (*entity.TeamPlan, error) {
+	if input.TeamID <= 0 || strings.TrimSpace(input.Title) == "" || strings.TrimSpace(input.LocationText) == "" || input.StartDate.IsZero() {
+		return nil, entity.ErrInvalidInput
+	}
+	if input.EndDate != nil && dateOnly(*input.EndDate).Before(dateOnly(input.StartDate)) {
+		return nil, entity.ErrInvalidRange
+	}
+	if !actor.CanCreateTeamPlan(input.TeamID) {
+		return nil, entity.ErrForbidden
+	}
+	created, err := s.repo.Create(ctx, repository.CreateInput{
+		TeamID:            input.TeamID,
+		CreatedByUserID:   actor.UserID,
+		Title:             strings.TrimSpace(input.Title),
+		WorkType:          input.WorkType,
+		StartDate:         dateOnly(input.StartDate),
+		EndDate:           input.EndDate,
+		WorkTime:          input.WorkTime,
+		LocationText:      strings.TrimSpace(input.LocationText),
+		PEAID:             input.PEAID,
+		OperationCenterID: input.OperationCenterID,
+		FeederID:          input.FeederID,
+		StationID:         input.StationID,
+		Notes:             input.Notes,
+		Status:            entity.StatusPlanned,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
+func (s *Service) Update(ctx context.Context, actor entity.Actor, input UpdateInput) (*entity.TeamPlan, error) {
+	if input.ID <= 0 {
+		return nil, entity.ErrInvalidID
+	}
+	existing, err := s.repo.GetByID(ctx, repository.GetQuery{ID: input.ID})
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, entity.ErrNotFound
+	}
+	if !actor.CanUpdateTeamPlan(*existing) {
+		return nil, entity.ErrForbidden
+	}
+	if input.TeamID != nil && *input.TeamID != existing.TeamID && actor.Role != "super_admin" {
+		return nil, entity.ErrForbidden
+	}
+	if input.Status != nil {
+		status := strings.TrimSpace(*input.Status)
+		if !entity.IsValidStatus(status) {
+			return nil, entity.ErrInvalidStatus
+		}
+	}
+	mergedStartDate := existing.StartDate
+	if input.StartDate != nil {
+		mergedStartDate = *input.StartDate
+	}
+	mergedEndDate := existing.EndDate
+	if input.EndDate != nil {
+		mergedEndDate = input.EndDate
+	}
+	if mergedEndDate != nil && dateOnly(*mergedEndDate).Before(dateOnly(mergedStartDate)) {
+		return nil, entity.ErrInvalidRange
+	}
+	updated, err := s.repo.Update(ctx, repository.UpdateInput{
+		ID:                input.ID,
+		TeamID:            input.TeamID,
+		Title:             input.Title,
+		WorkType:          input.WorkType,
+		StartDate:         input.StartDate,
+		EndDate:           input.EndDate,
+		WorkTime:          input.WorkTime,
+		LocationText:      input.LocationText,
+		PEAID:             input.PEAID,
+		OperationCenterID: input.OperationCenterID,
+		FeederID:          input.FeederID,
+		StationID:         input.StationID,
+		Notes:             input.Notes,
+		Status:            input.Status,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if updated == nil {
+		return nil, entity.ErrNotFound
+	}
+	return updated, nil
+}
+
+func (s *Service) Delete(ctx context.Context, actor entity.Actor, id int64) error {
+	if id <= 0 {
+		return entity.ErrInvalidID
+	}
+	existing, err := s.repo.GetByID(ctx, repository.GetQuery{ID: id})
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return entity.ErrNotFound
+	}
+	if !actor.CanDeleteTeamPlan(*existing) {
+		return entity.ErrForbidden
+	}
+	return s.repo.SoftDelete(ctx, repository.DeleteCommand{ID: id})
+}
+
+func normalizePage(page int) int {
+	if page < 1 {
+		return 1
+	}
+	return page
+}
+
+func normalizeLimit(limit int) int {
+	if limit < 1 || limit > 100 {
+		return 50
+	}
+	return limit
+}
+
+func dateOnly(t time.Time) time.Time {
+	if t.IsZero() {
+		return time.Time{}
+	}
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func (s *Service) MustNotUse() error {
+	return errors.New("unused")
+}

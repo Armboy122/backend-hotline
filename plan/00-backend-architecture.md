@@ -114,8 +114,10 @@ Phase 0 exception:
 | job details | `internal/feature/jobdetail` |
 | task_dailies | `internal/feature/task` |
 | monthly plan settings/files/status | `internal/feature/monthlyplan` |
+| planning calendar projection | `internal/feature/planningcalendar` |
 | dashboard aggregates | `internal/feature/dashboard` |
 | upload/R2 generic flow | `internal/feature/upload` or shared pkg adapter after review |
+
 
 ## Request Flow
 

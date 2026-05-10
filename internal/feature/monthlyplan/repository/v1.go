@@ -33,6 +33,21 @@ func (r *repository) FindPeriod(ctx context.Context, q PeriodFindQuery) (*entity
 	return &e, nil
 }
 
+func (r *repository) GetPeriodByID(ctx context.Context, id int64) (*entity.Entity, error) {
+	var mp models.MonthlyPlan
+	err := r.db.WithContext(ctx).
+		Where("id = ?", id).
+		First(&mp).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get period by id: %w", err)
+	}
+	e := toPeriodEntity(mp)
+	return &e, nil
+}
+
 func (r *repository) FindOrCreatePeriod(ctx context.Context, year, month int) (*entity.Entity, error) {
 	var mp models.MonthlyPlan
 	err := r.db.WithContext(ctx).
@@ -44,6 +59,49 @@ func (r *repository) FindOrCreatePeriod(ctx context.Context, year, month int) (*
 	}
 	e := toPeriodEntity(mp)
 	return &e, nil
+}
+
+func (r *repository) FindOrCreatePeriodsForYear(ctx context.Context, year int) ([]entity.Entity, error) {
+	var existing []models.MonthlyPlan
+	if err := r.db.WithContext(ctx).
+		Where("year = ?", year).
+		Find(&existing).Error; err != nil {
+		return nil, fmt.Errorf("find periods for year: %w", err)
+	}
+
+	byMonth := make(map[int]models.MonthlyPlan, len(existing))
+	for _, period := range existing {
+		byMonth[period.Month] = period
+	}
+
+	missing := make([]models.MonthlyPlan, 0, 12-len(byMonth))
+	for month := 1; month <= 12; month++ {
+		if _, ok := byMonth[month]; !ok {
+			missing = append(missing, models.MonthlyPlan{Year: year, Month: month})
+		}
+	}
+	if len(missing) > 0 {
+		if err := r.db.WithContext(ctx).Create(&missing).Error; err != nil {
+			return nil, fmt.Errorf("create missing periods for year: %w", err)
+		}
+	}
+
+	var periods []models.MonthlyPlan
+	if err := r.db.WithContext(ctx).
+		Where("year = ?", year).
+		Order("month ASC").
+		Find(&periods).Error; err != nil {
+		return nil, fmt.Errorf("load periods for year: %w", err)
+	}
+
+	result := make([]entity.Entity, 0, 12)
+	for _, period := range periods {
+		if period.Month < 1 || period.Month > 12 {
+			continue
+		}
+		result = append(result, toPeriodEntity(period))
+	}
+	return result, nil
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────
@@ -114,6 +172,31 @@ func (r *repository) ListFiles(ctx context.Context, q PlanFileListQuery) ([]enti
 	return result, nil
 }
 
+func (r *repository) ListFilesByPlanIDs(ctx context.Context, q PlanFileBatchListQuery) (map[int64][]entity.PlanFileEntity, error) {
+	result := make(map[int64][]entity.PlanFileEntity, len(q.MonthlyPlanIDs))
+	if len(q.MonthlyPlanIDs) == 0 {
+		return result, nil
+	}
+
+	query := r.db.WithContext(ctx).
+		Preload("Team").
+		Preload("UploadedBy").
+		Where(PlanFileColMonthlyPlanID()+" IN ?", q.MonthlyPlanIDs).
+		Scopes(models.PlanFileNotDeleted)
+	if q.TeamID != 0 {
+		query = query.Scopes(models.PlanFileByTeam(q.TeamID))
+	}
+
+	var files []models.PlanFile
+	if err := query.Order(PlanFileColMonthlyPlanID() + " ASC, " + PlanFileColCreatedAt() + " DESC").Find(&files).Error; err != nil {
+		return nil, fmt.Errorf("list files by plan ids: %w", err)
+	}
+	for _, f := range files {
+		result[f.MonthlyPlanID] = append(result[f.MonthlyPlanID], toPlanFileEntity(f))
+	}
+	return result, nil
+}
+
 func (r *repository) GetFileByID(ctx context.Context, id int64) (*entity.PlanFileEntity, error) {
 	var f models.PlanFile
 	err := r.db.WithContext(ctx).
@@ -142,6 +225,10 @@ func (r *repository) CreateFile(ctx context.Context, input PlanFileCreateInput) 
 		FileName:      input.FileName,
 		FileSizeBytes: input.FileSizeBytes,
 		Description:   input.Description,
+		WorkStartDate: input.WorkStartDate,
+		WorkEndDate:   input.WorkEndDate,
+		Destination:   input.Destination,
+		Remarks:       input.Remarks,
 		IsMasterPlan:  input.IsMasterPlan,
 		IsDeleted:     false,
 		CreatedAt:     now,
@@ -276,6 +363,10 @@ func toPlanFileEntity(f models.PlanFile) entity.PlanFileEntity {
 		FileName:      f.FileName,
 		FileSizeBytes: f.FileSizeBytes,
 		Description:   f.Description,
+		WorkStartDate: f.WorkStartDate,
+		WorkEndDate:   f.WorkEndDate,
+		Destination:   f.Destination,
+		Remarks:       f.Remarks,
 		IsMasterPlan:  f.IsMasterPlan,
 		IsDeleted:     f.IsDeleted,
 		DeletedAt:     f.DeletedAt,

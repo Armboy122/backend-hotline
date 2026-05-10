@@ -13,6 +13,7 @@ type Claims struct {
 	UserID   uint   `json:"user_id"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
+	TeamID   *int64 `json:"team_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -30,13 +31,13 @@ func NewJWTManager(secret string, accessTokenExpiry, refreshTokenExpiry time.Dur
 	}
 }
 
-func (j *JWTManager) GenerateTokenPair(userID uint, username, role string) (string, string, error) {
-	accessToken, err := j.generateToken(userID, username, role, j.accessTokenExpiry)
+func (j *JWTManager) GenerateTokenPair(userID uint, username, role string, teamID *int64) (string, string, error) {
+	accessToken, err := j.generateToken(userID, username, role, teamID, j.accessTokenExpiry)
 	if err != nil {
 		return "", "", err
 	}
 
-	refreshToken, err := j.generateToken(userID, username, role, j.refreshTokenExpiry)
+	refreshToken, err := j.generateToken(userID, username, role, teamID, j.refreshTokenExpiry)
 	if err != nil {
 		return "", "", err
 	}
@@ -44,11 +45,12 @@ func (j *JWTManager) GenerateTokenPair(userID uint, username, role string) (stri
 	return accessToken, refreshToken, nil
 }
 
-func (j *JWTManager) generateToken(userID uint, username, role string, expiry time.Duration) (string, error) {
+func (j *JWTManager) generateToken(userID uint, username, role string, teamID *int64, expiry time.Duration) (string, error) {
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
 		Role:     role,
+		TeamID:   teamID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

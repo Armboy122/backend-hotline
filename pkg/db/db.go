@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"backend-hotlines3/internal/config"
@@ -68,7 +69,21 @@ func Connect(ctx context.Context, cfg *config.Config) (*gorm.DB, error) {
 
 // AutoMigrate runs the current schema migration set.
 func AutoMigrate(ctx context.Context, db *gorm.DB) error {
-	if err := db.WithContext(ctx).AutoMigrate(
+	if err := db.WithContext(ctx).AutoMigrate(MigrationModels()...); err != nil {
+		return fmt.Errorf("failed to auto-migrate database: %w", err)
+	}
+	if err := ensureSingleActiveSuperAdminIndex(ctx, db); err != nil {
+		return err
+	}
+	if err := ensurePerformanceIndexes(ctx, db); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MigrationModels returns the ordered GORM model set owned by AutoMigrate.
+func MigrationModels() []any {
+	return []any{
 		&models.OperationCenter{},
 		&models.PEA{},
 		&models.Station{},
@@ -82,8 +97,36 @@ func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 		&models.PlanFile{},
 		&models.FileSizeLog{},
 		&models.MonthlyPlanSetting{},
-	); err != nil {
-		return fmt.Errorf("failed to auto-migrate database: %w", err)
+		&models.TeamPlan{},
+		&models.LargeWorkItem{},
+		&models.LargeWorkItemTeam{},
+	}
+}
+
+func ensurePerformanceIndexes(ctx context.Context, db *gorm.DB) error {
+	statements := []string{
+		`CREATE INDEX IF NOT EXISTS taskdaily_active_workdate_idx ON "TaskDaily" ("deletedat", "workdate")`,
+		`CREATE INDEX IF NOT EXISTS taskdaily_active_workdate_team_idx ON "TaskDaily" ("deletedat", "workdate", "teamId")`,
+		`CREATE INDEX IF NOT EXISTS planfile_plan_deleted_team_idx ON "PlanFile" ("monthlyPlanId", "isDeleted", "teamId")`,
+		`CREATE INDEX IF NOT EXISTS monthlyplan_year_month_idx ON "MonthlyPlan" ("year", "month")`,
+	}
+	for _, stmt := range statements {
+		if err := db.WithContext(ctx).Exec(stmt).Error; err != nil {
+			return fmt.Errorf("failed to ensure performance index: %w", err)
+		}
+	}
+	return nil
+}
+
+func ensureSingleActiveSuperAdminIndex(ctx context.Context, db *gorm.DB) error {
+	stmt := `CREATE UNIQUE INDEX IF NOT EXISTS user_single_active_super_admin_idx
+		ON "User" ((role))
+		WHERE role = 'super_admin' AND "isActive" = true AND "deletedAt" IS NULL`
+	if err := db.WithContext(ctx).Exec(stmt).Error; err != nil {
+		if strings.Contains(err.Error(), "could not create unique index") || strings.Contains(err.Error(), "duplicate key") {
+			return fmt.Errorf("active super_admin invariant violated; resolve duplicate active super_admin users before migrating: %w", err)
+		}
+		return fmt.Errorf("failed to ensure single active super_admin index: %w", err)
 	}
 	return nil
 }

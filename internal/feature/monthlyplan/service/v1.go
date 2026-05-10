@@ -9,6 +9,8 @@ import (
 
 	mpdomain "backend-hotlines3/internal/feature/monthlyplan/entity"
 	"backend-hotlines3/internal/feature/monthlyplan/repository"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // Service owns the monthly-plan usecase composition.
@@ -82,6 +84,100 @@ func (s *Service) EnsurePeriod(ctx context.Context, year, month int) (*mpdomain.
 		return nil, mpdomain.ErrInvalidPeriod
 	}
 	return s.repo.FindOrCreatePeriod(ctx, year, month)
+}
+
+// CanUploadForPeriod evaluates the previous-month lock window using the DB settings.
+func (s *Service) CanUploadForPeriod(ctx context.Context, actor mpdomain.Actor, year, month int) (bool, string, error) {
+	if year < 2000 || year > 2100 || month < 1 || month > 12 {
+		return false, "", mpdomain.ErrInvalidPeriod
+	}
+	settings, err := s.repo.GetOrCreateSettings(ctx)
+	if err != nil {
+		return false, "", mpdomain.ErrSettingsLoadFail
+	}
+	deadline := submissionDeadline(year, month, settings.LockDay)
+	locked := s.clock().After(deadline)
+	if !locked {
+		return true, deadline.Format("2006-01-02"), nil
+	}
+	return actor.CanUploadAfterLock(settings.AdminCanUploadAfterLock), deadline.Format("2006-01-02"), nil
+}
+
+type MonthOverview struct {
+	Period    mpdomain.Entity
+	Deadline  string
+	IsLocked  bool
+	Status    string
+	CanUpload bool
+	Files     []mpdomain.PlanFileEntity
+}
+
+type YearOverview struct {
+	Year   int
+	Months []MonthOverview
+}
+
+// GetYearOverview returns all 12 monthly plan buckets for a year.
+func (s *Service) GetYearOverview(ctx context.Context, actor mpdomain.Actor, year int) (*YearOverview, error) {
+	if year < 2000 || year > 2100 {
+		return nil, mpdomain.ErrInvalidPeriod
+	}
+	settings, err := s.repo.GetOrCreateSettings(ctx)
+	if err != nil {
+		return nil, mpdomain.ErrSettingsLoadFail
+	}
+	periods, err := s.repo.FindOrCreatePeriodsForYear(ctx, year)
+	if err != nil {
+		return nil, err
+	}
+	periodByMonth := make(map[int]mpdomain.Entity, len(periods))
+	planIDs := make([]int64, 0, len(periods))
+	for _, period := range periods {
+		periodByMonth[period.Month] = period
+		planIDs = append(planIDs, period.ID)
+	}
+
+	effectiveTeamID := int64(0)
+	if !actor.IsAdmin() {
+		if actor.TeamID != nil {
+			effectiveTeamID = *actor.TeamID
+		} else {
+			effectiveTeamID = -1
+		}
+	}
+	filesByPlan, err := s.repo.ListFilesByPlanIDs(ctx, repository.PlanFileBatchListQuery{MonthlyPlanIDs: planIDs, TeamID: effectiveTeamID})
+	if err != nil {
+		return nil, err
+	}
+
+	overview := &YearOverview{Year: year, Months: make([]MonthOverview, 0, 12)}
+	for month := 1; month <= 12; month++ {
+		period, ok := periodByMonth[month]
+		if !ok {
+			return nil, fmt.Errorf("missing monthly plan period for %d-%02d", year, month)
+		}
+		deadline := submissionDeadline(year, month, settings.LockDay)
+		locked := s.clock().After(deadline)
+		canSubmit := actor.CanUploadMasterPlan() || actor.CanUploadForTeam(actor.TeamID)
+		canUpload := canSubmit && (!locked || actor.CanUploadAfterLock(settings.AdminCanUploadAfterLock))
+		files := filesByPlan[period.ID]
+		status := "open"
+		if locked {
+			status = "locked"
+		}
+		if len(files) > 0 {
+			status = "has_files"
+		}
+		overview.Months = append(overview.Months, MonthOverview{
+			Period:    period,
+			Deadline:  deadline.Format("2006-01-02"),
+			IsLocked:  locked,
+			Status:    status,
+			CanUpload: canUpload,
+			Files:     files,
+		})
+	}
+	return overview, nil
 }
 
 // ── Files ────────────────────────────────────────────────────────────────────
@@ -161,6 +257,10 @@ func (s *Service) ConfirmUpload(ctx context.Context, actor mpdomain.Actor, input
 		FileName:      input.FileName,
 		FileSizeBytes: input.FileSizeBytes,
 		Description:   input.Description,
+		WorkStartDate: input.WorkStartDate,
+		WorkEndDate:   input.WorkEndDate,
+		Destination:   input.Destination,
+		Remarks:       input.Remarks,
 		IsMasterPlan:  input.IsMasterPlan,
 	})
 	if err != nil {
@@ -265,23 +365,57 @@ func (s *Service) HardDeleteFile(ctx context.Context, actor mpdomain.Actor, file
 
 // ── Submission Status ────────────────────────────────────────────────────────
 
-// GetSubmissionStatus returns each team's submission status for a period (admin only).
+// GetSubmissionStatus returns each team's submission status for a period.
+// Route-level auth is required; team_lead/user can view every team row for awareness
+// while file upload/download permissions remain enforced separately by team scope.
 func (s *Service) GetSubmissionStatus(ctx context.Context, actor mpdomain.Actor, planID int64) (*SubmissionOverview, error) {
-	if !actor.IsAdmin() {
-		return nil, mpdomain.ErrForbiddenAction
+	var (
+		settings *mpdomain.SettingsEntity
+		period   *mpdomain.Entity
+		teams    []repository.TeamInfo
+		counts   []repository.TeamCountRow
+	)
+	g, gCtx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		var err error
+		settings, err = s.repo.GetOrCreateSettings(gCtx)
+		if err != nil {
+			return mpdomain.ErrSettingsLoadFail
+		}
+		return nil
+	})
+	g.Go(func() error {
+		var err error
+		period, err = s.repo.GetPeriodByID(gCtx, planID)
+		if err != nil {
+			return fmt.Errorf("get period failed: %w", err)
+		}
+		if period == nil {
+			return mpdomain.ErrPeriodNotFound
+		}
+		return nil
+	})
+	g.Go(func() error {
+		var err error
+		teams, err = s.repo.ListTeams(gCtx)
+		if err != nil {
+			return fmt.Errorf("list teams failed: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		var err error
+		counts, err = s.repo.CountFilesByTeam(gCtx, repository.SubmissionQuery{PlanID: planID})
+		if err != nil {
+			return fmt.Errorf("count files failed: %w", err)
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
-	_, err := s.repo.GetOrCreateSettings(ctx)
-	if err != nil {
-		return nil, mpdomain.ErrSettingsLoadFail
-	}
-	teams, err := s.repo.ListTeams(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list teams failed: %w", err)
-	}
-	counts, err := s.repo.CountFilesByTeam(ctx, repository.SubmissionQuery{PlanID: planID})
-	if err != nil {
-		return nil, fmt.Errorf("count files failed: %w", err)
-	}
+	deadline := submissionDeadline(period.Year, period.Month, settings.LockDay)
+	missed := s.clock().After(deadline)
 	countMap := make(map[int64]int, len(counts))
 	for _, c := range counts {
 		countMap[c.TeamID] = c.Count
@@ -292,6 +426,8 @@ func (s *Service) GetSubmissionStatus(ctx context.Context, actor mpdomain.Actor,
 		status := "pending"
 		if count > 0 {
 			status = "submitted"
+		} else if missed {
+			status = "missed"
 		}
 		entries = append(entries, mpdomain.SubmissionStatusEntry{
 			TeamID:    team.ID,
@@ -300,7 +436,20 @@ func (s *Service) GetSubmissionStatus(ctx context.Context, actor mpdomain.Actor,
 			FileCount: count,
 		})
 	}
-	return &SubmissionOverview{Deadline: "", Teams: entries}, nil
+	return &SubmissionOverview{Deadline: deadline.Format("2006-01-02"), Teams: entries}, nil
+}
+
+func submissionDeadline(planYear, planMonth, lockDay int) time.Time {
+	if lockDay < 1 {
+		lockDay = 1
+	}
+	planMonthStart := time.Date(planYear, time.Month(planMonth), 1, 23, 59, 59, 0, time.UTC)
+	deadlineMonthStart := planMonthStart.AddDate(0, -1, 0)
+	lastDay := deadlineMonthStart.AddDate(0, 1, -1).Day()
+	if lockDay > lastDay {
+		lockDay = lastDay
+	}
+	return time.Date(deadlineMonthStart.Year(), deadlineMonthStart.Month(), lockDay, 23, 59, 59, 0, time.UTC)
 }
 
 // SubmissionOverview holds the submission status for all teams.

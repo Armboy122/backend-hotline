@@ -7,8 +7,11 @@ import (
 	"backend-hotlines3/internal/config"
 
 	authcontroller "backend-hotlines3/internal/feature/auth/controller"
+	"backend-hotlines3/internal/feature/auth/policy"
 	authrepository "backend-hotlines3/internal/feature/auth/repository"
 	authservice "backend-hotlines3/internal/feature/auth/service"
+	dailyreportdraftcontroller "backend-hotlines3/internal/feature/dailyreportdraft/controller"
+	dailyreportdraftservice "backend-hotlines3/internal/feature/dailyreportdraft/service"
 	dashboardcontroller "backend-hotlines3/internal/feature/dashboard/controller"
 	dashboardrepository "backend-hotlines3/internal/feature/dashboard/repository"
 	dashboardservice "backend-hotlines3/internal/feature/dashboard/service"
@@ -21,6 +24,9 @@ import (
 	jobtypecontroller "backend-hotlines3/internal/feature/jobtype/controller"
 	jobtyperepository "backend-hotlines3/internal/feature/jobtype/repository"
 	jobtypeservice "backend-hotlines3/internal/feature/jobtype/service"
+	largeworkcontroller "backend-hotlines3/internal/feature/largework/controller"
+	largeworkrepository "backend-hotlines3/internal/feature/largework/repository"
+	largeworkservice "backend-hotlines3/internal/feature/largework/service"
 	monthlyplancontroller "backend-hotlines3/internal/feature/monthlyplan/controller"
 	monthlyplanrepository "backend-hotlines3/internal/feature/monthlyplan/repository"
 	monthlyplanservice "backend-hotlines3/internal/feature/monthlyplan/service"
@@ -30,6 +36,8 @@ import (
 	peacontroller "backend-hotlines3/internal/feature/pea/controller"
 	pearepository "backend-hotlines3/internal/feature/pea/repository"
 	peaservicepkg "backend-hotlines3/internal/feature/pea/service"
+	planningcalendarcontroller "backend-hotlines3/internal/feature/planningcalendar/controller"
+	planningcalendarservice "backend-hotlines3/internal/feature/planningcalendar/service"
 	stationcontroller "backend-hotlines3/internal/feature/station/controller"
 	stationrepository "backend-hotlines3/internal/feature/station/repository"
 	stationservice "backend-hotlines3/internal/feature/station/service"
@@ -39,6 +47,9 @@ import (
 	teamcontroller "backend-hotlines3/internal/feature/team/controller"
 	teamrepository "backend-hotlines3/internal/feature/team/repository"
 	teamservice "backend-hotlines3/internal/feature/team/service"
+	teamplancontroller "backend-hotlines3/internal/feature/teamplan/controller"
+	teamplanrepository "backend-hotlines3/internal/feature/teamplan/repository"
+	teamplanservice "backend-hotlines3/internal/feature/teamplan/service"
 	uploadcontroller "backend-hotlines3/internal/feature/upload/controller"
 	usercontroller "backend-hotlines3/internal/feature/user/controller"
 	userrepository "backend-hotlines3/internal/feature/user/repository"
@@ -97,7 +108,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			authGroup.POST("/register", aCtrl.Register)
 			authGroup.POST("/refresh", aCtrl.RefreshToken)
 			authGroup.POST("/logout", authMw.RequireAuth(), aCtrl.Logout)
-			authGroup.GET("/me", authMw.RequireAuth(), middleware.CachePrivate(), aCtrl.Me)
+			authGroup.GET("/me", authMw.RequireAuth(), middleware.CachePrivate(30), aCtrl.Me)
 		}
 
 		// ── Master Data Feature (Phase D) ───────────────────────────────────
@@ -110,9 +121,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			handler := teamcontroller.NewController(service)
 			teamsV1.GET("", middleware.CachePublic(120), handler.List)
 			teamsV1.GET("/:id", middleware.CachePublic(120), handler.GetByID)
-			teamsV1.POST("", handler.Create)
-			teamsV1.PUT("/:id", handler.Update)
-			teamsV1.DELETE("/:id", handler.Delete)
+			teamsV1.POST("", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), handler.Create)
+			teamsV1.PUT("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), handler.Update)
+			teamsV1.DELETE("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), handler.Delete)
 		}
 
 		// Job Types — cache 5 minutes (admin-only edits, changes infrequently)
@@ -123,9 +134,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			handler := jobtypecontroller.NewController(service)
 			jobTypesV1.GET("", middleware.CachePublic(300), handler.List)
 			jobTypesV1.GET("/:id", middleware.CachePublic(300), handler.GetByID)
-			jobTypesV1.POST("", handler.Create)
-			jobTypesV1.PUT("/:id", handler.Update)
-			jobTypesV1.DELETE("/:id", handler.Delete)
+			jobTypesV1.POST("", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), handler.Create)
+			jobTypesV1.PUT("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), handler.Update)
+			jobTypesV1.DELETE("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), handler.Delete)
 		}
 
 		// Job Details — cache 5 minutes (admin-only edits, changes infrequently)
@@ -136,10 +147,10 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			jdCtrl := jobdetailcontroller.NewController(jdSvc)
 			jobDetailsV1.GET("", middleware.CachePublic(300), jdCtrl.List)
 			jobDetailsV1.GET("/:id", middleware.CachePublic(300), jdCtrl.GetByID)
-			jobDetailsV1.POST("", jdCtrl.Create)
-			jobDetailsV1.PUT("/:id", jdCtrl.Update)
-			jobDetailsV1.DELETE("/:id", jdCtrl.Delete)
-			jobDetailsV1.POST("/:id/restore", jdCtrl.Restore)
+			jobDetailsV1.POST("", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), jdCtrl.Create)
+			jobDetailsV1.PUT("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), jdCtrl.Update)
+			jobDetailsV1.DELETE("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), jdCtrl.Delete)
+			jobDetailsV1.POST("/:id/restore", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), jdCtrl.Restore)
 		}
 
 		// Feeders — cache 2 minutes (has task counts that update with new tasks)
@@ -150,9 +161,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			fCtrl := feedercontroller.NewController(fSvc)
 			feedersV1.GET("", middleware.CachePublic(120), fCtrl.List)
 			feedersV1.GET("/:id", middleware.CachePublic(120), fCtrl.GetByID)
-			feedersV1.POST("", fCtrl.Create)
-			feedersV1.PUT("/:id", fCtrl.Update)
-			feedersV1.DELETE("/:id", fCtrl.Delete)
+			feedersV1.POST("", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), fCtrl.Create)
+			feedersV1.PUT("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), fCtrl.Update)
+			feedersV1.DELETE("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), fCtrl.Delete)
 		}
 
 		// Stations — cache 10 minutes (static reference data)
@@ -163,9 +174,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			handler := stationcontroller.NewController(service)
 			stationsV1.GET("", middleware.CachePublic(600), handler.List)
 			stationsV1.GET("/:id", middleware.CachePublic(600), handler.GetByID)
-			stationsV1.POST("", handler.Create)
-			stationsV1.PUT("/:id", handler.Update)
-			stationsV1.DELETE("/:id", handler.Delete)
+			stationsV1.POST("", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), handler.Create)
+			stationsV1.PUT("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), handler.Update)
+			stationsV1.DELETE("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), handler.Delete)
 		}
 
 		// PEAs — cache 10 minutes (static reference data)
@@ -176,10 +187,10 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			peaCtrl := peacontroller.NewController(peaSvc)
 			peasV1.GET("", middleware.CachePublic(600), peaCtrl.List)
 			peasV1.GET("/:id", middleware.CachePublic(600), peaCtrl.GetByID)
-			peasV1.POST("", peaCtrl.Create)
-			peasV1.POST("/bulk", peaCtrl.BulkCreate)
-			peasV1.PUT("/:id", peaCtrl.Update)
-			peasV1.DELETE("/:id", peaCtrl.Delete)
+			peasV1.POST("", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), peaCtrl.Create)
+			peasV1.POST("/bulk", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), peaCtrl.BulkCreate)
+			peasV1.PUT("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), peaCtrl.Update)
+			peasV1.DELETE("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), peaCtrl.Delete)
 		}
 
 		// Operation Centers — cache 10 minutes (static reference data, rarely changes)
@@ -190,24 +201,40 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			ocCtrl := opcontroller.NewController(ocSvc)
 			operationCentersV1.GET("", middleware.CachePublic(600), ocCtrl.List)
 			operationCentersV1.GET("/:id", middleware.CachePublic(600), ocCtrl.GetByID)
-			operationCentersV1.POST("", ocCtrl.Create)
-			operationCentersV1.PUT("/:id", ocCtrl.Update)
-			operationCentersV1.DELETE("/:id", ocCtrl.Delete)
+			operationCentersV1.POST("", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), ocCtrl.Create)
+			operationCentersV1.PUT("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), ocCtrl.Update)
+			operationCentersV1.DELETE("/:id", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), ocCtrl.Delete)
 		}
 
-		// Tasks
+		// Tasks — authenticated and team-scoped; non-privileged users only see their own team.
 		tasksV1 := apiV1.Group("/tasks")
+		tasksV1.Use(authMw.RequireAuth())
 		{
 			repository := taskrepository.NewRepository(db)
 			service := taskservice.NewService(repository)
 			handler := taskcontroller.NewController(service)
-			tasksV1.GET("", middleware.CachePublic(60), handler.List)                    // cache 1 min (paginated, dynamic filters)
-			tasksV1.GET("/by-team", middleware.CachePublic(120), handler.ListByTeam)     // cache 2 min
-			tasksV1.GET("/by-filter", middleware.CachePublic(180), handler.ListByFilter) // cache 3 min (per year/month combo)
-			tasksV1.GET("/:id", middleware.CachePublic(60), handler.GetByID)             // cache 1 min
+			tasksV1.GET("", middleware.CachePrivate(), handler.List)
+			tasksV1.GET("/by-team", middleware.CachePrivate(), handler.ListByTeam)
+			tasksV1.GET("/by-filter", middleware.CachePrivate(), handler.ListByFilter)
+			tasksV1.GET("/:id", middleware.CachePrivate(), handler.GetByID)
 			tasksV1.POST("", handler.Create)
 			tasksV1.PUT("/:id", handler.Update)
 			tasksV1.DELETE("/:id", handler.Delete)
+		}
+
+		// Daily-report draft / prefill — authenticated and team-scoped.
+		{
+			teamPlanRepo := teamplanrepository.NewRepository(db)
+			monthlyPlanRepo := monthlyplanrepository.NewRepository(db)
+			lwRepo := largeworkrepository.NewRepository(db)
+			draftSvc := dailyreportdraftservice.NewService(teamPlanRepo, monthlyPlanRepo, lwRepo)
+			draftCtrl := dailyreportdraftcontroller.NewController(draftSvc)
+			dailyDraftV1 := apiV1.Group("/daily-report-drafts")
+			dailyDraftV1.Use(authMw.RequireAuth())
+			{
+				dailyDraftV1.GET("/sources", middleware.CachePrivate(), draftCtrl.ListSources)
+				dailyDraftV1.GET("/from-plan", middleware.CachePrivate(), draftCtrl.FromPlan)
+			}
 		}
 
 		// Upload — no cache (presigned URLs are unique per request)
@@ -220,6 +247,47 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 				uploadV1.POST("/image", uploadHandler.GetPresignedURL)
 				uploadV1.DELETE("/*key", uploadHandler.DeleteFile)
 			}
+		}
+
+		// Team Plans
+		{
+			teamPlanRepo := teamplanrepository.NewRepository(db)
+			teamPlanSvc := teamplanservice.NewService(teamPlanRepo)
+			teamPlanCtrl := teamplancontroller.NewController(teamPlanSvc)
+			teamPlansV1 := apiV1.Group("/team-plans")
+			teamPlansV1.Use(authMw.RequireAuth())
+			teamPlansV1.GET("", middleware.CachePrivate(60), teamPlanCtrl.List)
+			teamPlansV1.GET("/:id", middleware.CachePrivate(60), teamPlanCtrl.GetByID)
+			teamPlansV1.POST("", teamPlanCtrl.Create)
+			teamPlansV1.PUT("/:id", teamPlanCtrl.Update)
+			teamPlansV1.DELETE("/:id", teamPlanCtrl.Delete)
+		}
+
+		// Planning Calendar
+		{
+			teamPlanRepo := teamplanrepository.NewRepository(db)
+			monthlyPlanRepo := monthlyplanrepository.NewRepository(db)
+			lwRepo := largeworkrepository.NewRepository(db)
+			planningSvc := planningcalendarservice.NewService(teamPlanRepo, monthlyPlanRepo, lwRepo, time.Now)
+			planningCtrl := planningcalendarcontroller.NewController(planningSvc)
+			planningV1 := apiV1.Group("/planning")
+			planningV1.Use(authMw.RequireAuth())
+			planningV1.GET("/calendar/:year/:month", middleware.CachePrivate(60), planningCtrl.GetMonth)
+		}
+
+		// Large Work Items (งานระดมทีม)
+		{
+			lwRepo := largeworkrepository.NewRepository(db)
+			lwSvc := largeworkservice.NewService(lwRepo)
+			lwCtrl := largeworkcontroller.NewController(lwSvc)
+			largeWorksV1 := apiV1.Group("/large-work-items")
+			largeWorksV1.Use(authMw.RequireAuth())
+			largeWorksV1.GET("", middleware.CachePrivate(60), lwCtrl.List)
+			largeWorksV1.GET("/:id", middleware.CachePrivate(60), lwCtrl.GetByID)
+			largeWorksV1.POST("", lwCtrl.Create)
+			largeWorksV1.PATCH("/:id", lwCtrl.Update)
+			largeWorksV1.POST("/:id/cancel", lwCtrl.Cancel)
+			largeWorksV1.POST("/:id/attachments", lwCtrl.Attachments)
 		}
 
 		// Monthly Plan File Management
@@ -246,7 +314,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			{
 				// Settings (admin only)
 				adminOnly := monthlyPlansV1.Group("")
-				adminOnly.Use(authMw.RequireRole("admin"))
+				adminOnly.Use(authMw.RequireRole(monthlyPlanManagerRoles()...))
 				{
 					adminOnly.GET("/settings", monthlyPlanController.GetSettings)
 					adminOnly.PUT("/settings", monthlyPlanController.UpdateSettings)
@@ -255,9 +323,10 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 				}
 
 				// Period endpoints (all authenticated users)
-				monthlyPlansV1.GET("/:year/:month", monthlyPlanController.GetOrCreatePeriod)
-				monthlyPlansV1.GET("/:year/:month/files", monthlyPlanController.ListFiles)
-				monthlyPlansV1.GET("/:year/:month/status", monthlyPlanController.GetSubmissionStatus)
+				monthlyPlansV1.GET("/:year/overview", middleware.CachePrivate(60), monthlyPlanController.GetYearOverview)
+				monthlyPlansV1.GET("/:year/:month", middleware.CachePrivate(60), monthlyPlanController.GetOrCreatePeriod)
+				monthlyPlansV1.GET("/:year/:month/files", middleware.CachePrivate(60), monthlyPlanController.ListFiles)
+				monthlyPlansV1.GET("/:year/:month/status", middleware.CachePrivate(60), monthlyPlanController.GetSubmissionStatus)
 
 				// Upload flow (presign + confirm)
 				monthlyPlansV1.POST("/:year/:month/files/presign", monthlyPlanController.PresignUpload)
@@ -275,11 +344,12 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			dbSvc := dashboardservice.NewService(dbRepo)
 			dbCtrl := dashboardcontroller.NewController(dbSvc)
 			dashboardV1 := apiV1.Group("/dashboard")
-			dashboardV1.GET("/summary", middleware.CachePublic(300), dbCtrl.Summary)
-			dashboardV1.GET("/top-jobs", middleware.CachePublic(300), dbCtrl.TopJobs)
-			dashboardV1.GET("/top-feeders", middleware.CachePublic(300), dbCtrl.TopFeeders)
-			dashboardV1.GET("/feeder-matrix", middleware.CachePublic(300), dbCtrl.FeederMatrix)
-			dashboardV1.GET("/stats", middleware.CachePublic(300), dbCtrl.Stats)
+			dashboardV1.Use(authMw.RequireAuth(), authMw.RequireRole(dashboardReadRoles()...))
+			dashboardV1.GET("/summary", middleware.CachePrivate(60), dbCtrl.Summary)
+			dashboardV1.GET("/top-jobs", middleware.CachePrivate(60), dbCtrl.TopJobs)
+			dashboardV1.GET("/top-feeders", middleware.CachePrivate(60), dbCtrl.TopFeeders)
+			dashboardV1.GET("/feeder-matrix", middleware.CachePrivate(60), dbCtrl.FeederMatrix)
+			dashboardV1.GET("/stats", middleware.CachePrivate(60), dbCtrl.Stats)
 		}
 
 		// Users — no cache (admin-only + user-specific context)
@@ -290,14 +360,27 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			uCtrl := usercontroller.NewController(uSvc)
 			// Apply authentication middleware to all user routes
 			usersV1.Use(authMw.RequireAuth())
+			// Contact directory is visible to every authenticated user.
+			contactsV1 := apiV1.Group("/contact-directory")
+			contactsV1.Use(authMw.RequireAuth())
+			{
+				contactsV1.GET("", middleware.CachePrivate(), uCtrl.ListContacts)
+				contactsV1.GET("/:userId", middleware.CachePrivate(), uCtrl.GetContactByID)
+			}
+
+			// Own contact info update is available to every authenticated user.
+			usersV1.PATCH("/me/contact", uCtrl.UpdateOwnContact)
+
 			// Admin only routes
 			adminUsers := usersV1.Group("")
-			adminUsers.Use(authMw.RequireRole("admin"))
+			adminUsers.Use(authMw.RequireRole(superAdminOnlyRoles()...))
 			{
 				adminUsers.GET("", middleware.CachePrivate(), uCtrl.List)
 				adminUsers.GET("/:id", middleware.CachePrivate(), uCtrl.GetByID)
 				adminUsers.POST("", uCtrl.Create)
 				adminUsers.PUT("/:id", uCtrl.Update)
+				adminUsers.PATCH("/:id/contact", uCtrl.UpdateContact)
+				adminUsers.PUT("/:id/reset-password", uCtrl.ResetPassword)
 				adminUsers.DELETE("/:id", uCtrl.Delete)
 			}
 
@@ -307,6 +390,18 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 	}
 
 	return r
+}
+
+func dashboardReadRoles() []string {
+	return []string{policy.RoleSuperAdmin, policy.RoleViewer}
+}
+
+func superAdminOnlyRoles() []string {
+	return []string{policy.RoleSuperAdmin}
+}
+
+func monthlyPlanManagerRoles() []string {
+	return []string{policy.RoleSuperAdmin, policy.RoleAdmin}
 }
 
 func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
@@ -329,7 +424,7 @@ func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
 		}
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, PATCH, DELETE")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
