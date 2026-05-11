@@ -23,6 +23,7 @@ var (
 	ErrInvalidDateRange        = errors.New("endDate must be on or after startDate")
 	ErrInvalidStateTransition  = errors.New("large work item state does not allow this operation")
 	ErrInvalidTask             = errors.New("invalid large work task")
+	ErrTaskSchemaUnavailable   = errors.New("large work task schema is unavailable; run database migration for large_work_tasks")
 	ErrPhotoRequired           = errors.New("before and after photo data is required")
 )
 
@@ -218,6 +219,7 @@ func (s *service) GetByID(ctx context.Context, actor entity.Actor, id int64) (*e
 	}
 	item, err := s.repo.GetByID(ctx, repo.GetQuery{ID: id})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if item == nil {
@@ -241,6 +243,7 @@ func (s *service) List(ctx context.Context, actor entity.Actor, input ListInput)
 	input.TeamID = actor.ScopedTeamID(input.TeamID)
 	items, total, err := s.repo.List(ctx, repo.ListQuery{Page: page, Limit: limit, From: input.From, To: input.To, TeamID: input.TeamID, Statuses: input.Statuses})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	visible := make([]entity.LargeWorkItem, 0, len(items))
@@ -258,6 +261,7 @@ func (s *service) Update(ctx context.Context, actor entity.Actor, input UpdateIn
 	}
 	existing, err := s.repo.GetByID(ctx, repo.GetQuery{ID: input.ID})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if existing == nil {
@@ -322,6 +326,7 @@ func (s *service) Update(ctx context.Context, actor entity.Actor, input UpdateIn
 		Status:             input.Status,
 	})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if updated == nil {
@@ -336,6 +341,7 @@ func (s *service) Cancel(ctx context.Context, actor entity.Actor, id int64) (*en
 	}
 	item, err := s.repo.GetByID(ctx, repo.GetQuery{ID: id})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if item == nil {
@@ -385,12 +391,20 @@ func isAllowedStatus(status string) bool {
 	}
 }
 
+func mapRepositoryError(err error) error {
+	if errors.Is(err, repo.ErrSchemaUnavailable) {
+		return ErrTaskSchemaUnavailable
+	}
+	return err
+}
+
 func (s *service) GetOverview(ctx context.Context, actor entity.Actor, id int64) (*OverviewOutput, error) {
 	if id <= 0 {
 		return nil, ErrInvalidID
 	}
 	item, err := s.repo.GetByID(ctx, repo.GetQuery{ID: id})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if item == nil {
@@ -401,6 +415,7 @@ func (s *service) GetOverview(ctx context.Context, actor entity.Actor, id int64)
 	}
 	tasks, err := s.repo.ListTasksByPlan(ctx, repo.ListTasksQuery{LargeWorkItemID: id})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	progress, teamProgress := summarizeTasks(tasks)
@@ -413,6 +428,7 @@ func (s *service) ReplaceTasks(ctx context.Context, actor entity.Actor, planID i
 	}
 	item, err := s.repo.GetByID(ctx, repo.GetQuery{ID: planID})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if item == nil {
@@ -438,8 +454,7 @@ func (s *service) ReplaceTasks(ctx context.Context, actor entity.Actor, planID i
 			return nil, ErrInvalidTask
 		}
 		if _, ok := participantSet[t.AssignedTeamID]; !ok {
-			participantSet[t.AssignedTeamID] = struct{}{}
-			participants = append(participants, t.AssignedTeamID)
+			return nil, ErrInvalidTask
 		}
 		seq := t.Sequence
 		if seq <= 0 {
@@ -449,6 +464,7 @@ func (s *service) ReplaceTasks(ctx context.Context, actor entity.Actor, planID i
 	}
 	existingTasks, err := s.repo.ListTasksByPlan(ctx, repo.ListTasksQuery{LargeWorkItemID: planID})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	for _, existingTask := range existingTasks {
@@ -456,15 +472,24 @@ func (s *service) ReplaceTasks(ctx context.Context, actor entity.Actor, planID i
 			return nil, ErrInvalidStateTransition
 		}
 	}
-	return s.repo.ReplaceTasksAndParticipants(ctx, repo.ReplaceTasksAndParticipantsInput{LargeWorkItemID: planID, OwnerTeamID: item.OwnerTeamID, ParticipantTeamIDs: participants, Tasks: tasks})
+	replaced, err := s.repo.ReplaceTasksAndParticipants(ctx, repo.ReplaceTasksAndParticipantsInput{LargeWorkItemID: planID, OwnerTeamID: item.OwnerTeamID, ParticipantTeamIDs: participants, Tasks: tasks})
+	if err != nil {
+		return nil, mapRepositoryError(err)
+	}
+	return replaced, nil
 }
 
 func (s *service) ListTasks(ctx context.Context, actor entity.Actor, planID int64) ([]entity.LargeWorkTask, error) {
 	_, err := s.GetByID(ctx, actor, planID)
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
-	return s.repo.ListTasksByPlan(ctx, repo.ListTasksQuery{LargeWorkItemID: planID})
+	tasks, err := s.repo.ListTasksByPlan(ctx, repo.ListTasksQuery{LargeWorkItemID: planID})
+	if err != nil {
+		return nil, mapRepositoryError(err)
+	}
+	return tasks, nil
 }
 
 func (s *service) MyTodos(ctx context.Context, actor entity.Actor, input MyTodosInput) (*MyTodosOutput, error) {
@@ -485,6 +510,7 @@ func (s *service) MyTodos(ctx context.Context, actor entity.Actor, input MyTodos
 	}
 	items, total, err := s.repo.ListAssignedTasks(ctx, repo.ListAssignedTasksQuery{AssignedTeamID: *actor.TeamID, Statuses: statuses, Page: page, Limit: limit})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	return &MyTodosOutput{Items: items, Page: page, Limit: limit, Total: total}, nil
@@ -493,6 +519,7 @@ func (s *service) MyTodos(ctx context.Context, actor entity.Actor, input MyTodos
 func (s *service) StartTask(ctx context.Context, actor entity.Actor, taskID int64) (*entity.LargeWorkTask, error) {
 	task, err := s.getOwnTask(ctx, actor, taskID)
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if task.Status != entity.LargeWorkTaskStatusTodo && task.Status != entity.LargeWorkTaskStatusBlocked {
@@ -501,12 +528,17 @@ func (s *service) StartTask(ctx context.Context, actor entity.Actor, taskID int6
 	now := time.Now()
 	status := entity.LargeWorkTaskStatusInProgress
 	uid := actor.UserID
-	return s.repo.UpdateTask(ctx, repo.UpdateTaskInput{ID: taskID, Status: &status, StartedByUserID: &uid, StartedAt: &now})
+	updated, err := s.repo.UpdateTask(ctx, repo.UpdateTaskInput{ID: taskID, Status: &status, StartedByUserID: &uid, StartedAt: &now})
+	if err != nil {
+		return nil, mapRepositoryError(err)
+	}
+	return updated, nil
 }
 
 func (s *service) AttachTaskPhoto(ctx context.Context, actor entity.Actor, taskID int64, kind string, url string) (*entity.LargeWorkTask, error) {
 	task, err := s.getOwnTask(ctx, actor, taskID)
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	url = strings.TrimSpace(url)
@@ -525,12 +557,17 @@ func (s *service) AttachTaskPhoto(ctx context.Context, actor entity.Actor, taskI
 	default:
 		return nil, ErrInvalidTask
 	}
-	return s.repo.UpdateTask(ctx, input)
+	updated, err := s.repo.UpdateTask(ctx, input)
+	if err != nil {
+		return nil, mapRepositoryError(err)
+	}
+	return updated, nil
 }
 
 func (s *service) CompleteTask(ctx context.Context, actor entity.Actor, taskID int64, input CompleteTaskInput) (*entity.LargeWorkTask, error) {
 	task, err := s.getOwnTask(ctx, actor, taskID)
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if task.Status != entity.LargeWorkTaskStatusInProgress {
@@ -547,12 +584,17 @@ func (s *service) CompleteTask(ctx context.Context, actor entity.Actor, taskID i
 	now := time.Now()
 	status := entity.LargeWorkTaskStatusDone
 	uid := actor.UserID
-	return s.repo.UpdateTask(ctx, repo.UpdateTaskInput{ID: taskID, Status: &status, AfterPhotoURLs: after, CompletionNote: &note, CompletedByUserID: &uid, CompletedAt: &now})
+	updated, err := s.repo.UpdateTask(ctx, repo.UpdateTaskInput{ID: taskID, Status: &status, AfterPhotoURLs: after, CompletionNote: &note, CompletedByUserID: &uid, CompletedAt: &now})
+	if err != nil {
+		return nil, mapRepositoryError(err)
+	}
+	return updated, nil
 }
 
 func (s *service) BlockTask(ctx context.Context, actor entity.Actor, taskID int64, reason string) (*entity.LargeWorkTask, error) {
 	task, err := s.getOwnTask(ctx, actor, taskID)
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if task.Status == entity.LargeWorkTaskStatusDone || task.Status == entity.LargeWorkTaskStatusCancelled {
@@ -562,7 +604,11 @@ func (s *service) BlockTask(ctx context.Context, actor entity.Actor, taskID int6
 		return nil, ErrInvalidTask
 	}
 	status := entity.LargeWorkTaskStatusBlocked
-	return s.repo.UpdateTask(ctx, repo.UpdateTaskInput{ID: taskID, Status: &status, Notes: &reason})
+	updated, err := s.repo.UpdateTask(ctx, repo.UpdateTaskInput{ID: taskID, Status: &status, Notes: &reason})
+	if err != nil {
+		return nil, mapRepositoryError(err)
+	}
+	return updated, nil
 }
 
 func (s *service) getOwnTask(ctx context.Context, actor entity.Actor, taskID int64) (*entity.LargeWorkTask, error) {
@@ -571,6 +617,7 @@ func (s *service) getOwnTask(ctx context.Context, actor entity.Actor, taskID int
 	}
 	task, err := s.repo.GetTaskByID(ctx, repo.GetTaskQuery{ID: taskID})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if task == nil {
@@ -581,6 +628,7 @@ func (s *service) getOwnTask(ctx context.Context, actor entity.Actor, taskID int
 	}
 	item, err := s.repo.GetByID(ctx, repo.GetQuery{ID: task.LargeWorkItemID})
 	if err != nil {
+		err = mapRepositoryError(err)
 		return nil, err
 	}
 	if item == nil {

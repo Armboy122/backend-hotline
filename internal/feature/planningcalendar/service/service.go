@@ -308,8 +308,10 @@ func buildLargeWorkItem(actor largeworkentity.Actor, work largeworkentity.LargeW
 			item.Teams = append(item.Teams, TeamRef{ID: team.ID, Name: team.Name})
 		}
 	}
-	item.Actions.CanEdit = actor.CanUpdateLargeWork(&work)
-	item.Actions.CanDelete = actor.CanCancelLargeWork(&work)
+	// Large-work calendar entries are read-only in the MVP; edits happen through
+	// the large-work feature endpoints so planning-board/task invariants stay centralized.
+	item.Actions.CanEdit = false
+	item.Actions.CanDelete = false
 	return item
 }
 

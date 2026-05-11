@@ -11,6 +11,7 @@ func TestMigrationModelsIncludeLargeWorkFoundation(t *testing.T) {
 
 	assertMigrationModelRegistered[models.LargeWorkItem](t, migrationModels)
 	assertMigrationModelRegistered[models.LargeWorkItemTeam](t, migrationModels)
+	assertMigrationModelRegistered[models.LargeWorkTask](t, migrationModels)
 }
 
 func assertMigrationModelRegistered[T any](t *testing.T, migrationModels []any) {

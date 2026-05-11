@@ -194,6 +194,8 @@ func mapErr(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, service.ErrForbidden):
 		return http.StatusForbidden
+	case errors.Is(err, service.ErrTaskSchemaUnavailable):
+		return http.StatusServiceUnavailable
 	case errors.Is(err, service.ErrInvalidID), errors.Is(err, service.ErrInvalidOwnerTeam), errors.Is(err, service.ErrInvalidTitle), errors.Is(err, service.ErrInvalidLocation), errors.Is(err, service.ErrInvalidStartDate), errors.Is(err, service.ErrInvalidParticipantTeams), errors.Is(err, service.ErrInvalidStatus), errors.Is(err, service.ErrInvalidDateRange), errors.Is(err, service.ErrInvalidStateTransition), errors.Is(err, service.ErrInvalidTask), errors.Is(err, service.ErrPhotoRequired):
 		return http.StatusBadRequest
 	default:

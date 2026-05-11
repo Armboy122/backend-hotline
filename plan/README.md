@@ -61,6 +61,9 @@ The previous `internal/modules/<module>` direction is deprecated. Existing modul
 | 27 | [`18-hnq-final-release-readiness-and-handoff-2026-05-10.md`](./18-hnq-final-release-readiness-and-handoff-2026-05-10.md) | HNQ final release readiness and handoff report covering implemented flows, role matrix, gates, risks, and manual validation steps |
 | 28 | [`28-hotline-large-work-execution-replan-2026-05-11.md`](./28-hotline-large-work-execution-replan-2026-05-11.md) | Product-approved replan for `งานระดมทีม`: teamlead creates/edits, assigns work to teams, worker todo execution with before/after photos |
 | 29 | [`29-hotline-large-work-execution-qa-handoff-2026-05-11.md`](./29-hotline-large-work-execution-qa-handoff-2026-05-11.md) | Integration QA handoff for `งานระดมทีม` execution gates, blockers, risks, and manual QA script |
+| 30 | [`30-hotline-large-work-push-cleanup-obsidian-note-2026-05-11.md`](./30-hotline-large-work-push-cleanup-obsidian-note-2026-05-11.md) | Obsidian/project note recording pushed commits, cleanup backup path, infographic location, and final board/watchdog status |
+| 31 | [`31-hotline-large-work-team-task-queue-fix-plan-2026-05-11.md`](./31-hotline-large-work-team-task-queue-fix-plan-2026-05-11.md) | Root-cause analysis and fix plan for per-team task queues not loading/assigning after a large-work plan is created |
+| 32 | [`32-hotline-large-work-planning-board-dragdrop-plan-2026-05-11.md`](./32-hotline-large-work-planning-board-dragdrop-plan-2026-05-11.md) | UX/technical plan for a desktop planning board with drag/drop team lanes plus plain-form fallback for `งานระดมทีม` task cards |
 
 ## Phase Progress
 

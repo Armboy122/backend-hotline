@@ -425,3 +425,27 @@ func TestExecutionEndpointsMapValidationAndForbiddenErrors(t *testing.T) {
 		t.Fatalf("replace status=%d want 403 body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestExecutionEndpointsMapSchemaUnavailableToServiceUnavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &fakeService{myTodosErr: service.ErrTaskSchemaUnavailable}
+	c := NewController(svc)
+	r := gin.New()
+	r.Use(func(ctx *gin.Context) {
+		ctx.Set("user_id", uint(1))
+		ctx.Set("role", policy.RoleUser)
+		ctx.Set("team_id", int64(8))
+		ctx.Next()
+	})
+	r.GET("/v1/large-work-tasks/my-todos", c.MyTodos)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/large-work-tasks/my-todos", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("my-todos status=%d want 503 body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "large work task schema is unavailable") {
+		t.Fatalf("schema error body is not clear: %s", rec.Body.String())
+	}
+}

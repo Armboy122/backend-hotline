@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"backend-hotlines3/internal/feature/largework/entity"
@@ -13,6 +14,8 @@ import (
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
+
+var ErrSchemaUnavailable = errors.New("large work task schema is unavailable; run database migration for large_work_tasks")
 
 type ListQuery struct {
 	Page     int
@@ -353,7 +356,7 @@ func (r *repository) ReplaceTasks(ctx context.Context, input ReplaceTasksInput) 
 		return replaceTaskRows(tx, input.LargeWorkItemID, rows)
 	})
 	if err != nil {
-		return nil, err
+		return nil, mapTaskSchemaError(err)
 	}
 	return r.ListTasksByPlan(ctx, ListTasksQuery{LargeWorkItemID: input.LargeWorkItemID})
 }
@@ -384,7 +387,7 @@ func (r *repository) ReplaceTasksAndParticipants(ctx context.Context, input Repl
 		return replaceTaskRows(tx, input.LargeWorkItemID, rows)
 	})
 	if err != nil {
-		return nil, err
+		return nil, mapTaskSchemaError(err)
 	}
 	return r.ListTasksByPlan(ctx, ListTasksQuery{LargeWorkItemID: input.LargeWorkItemID})
 }
@@ -421,7 +424,7 @@ func (r *repository) ListTasksByPlan(ctx context.Context, q ListTasksQuery) ([]e
 	}
 	var tasks []models.LargeWorkTask
 	if err := dbq.Order("sequence ASC, id ASC").Find(&tasks).Error; err != nil {
-		return nil, err
+		return nil, mapTaskSchemaError(err)
 	}
 	return mapTasks(tasks), nil
 }
@@ -446,11 +449,11 @@ func (r *repository) ListAssignedTasks(ctx context.Context, q ListAssignedTasksQ
 	}
 	var total int64
 	if err := dbq.Count(&total).Error; err != nil {
-		return nil, 0, err
+		return nil, 0, mapTaskSchemaError(err)
 	}
 	var tasks []models.LargeWorkTask
 	if err := dbq.Order("large_work_item_id ASC, sequence ASC, id ASC").Offset((page - 1) * limit).Limit(limit).Find(&tasks).Error; err != nil {
-		return nil, 0, err
+		return nil, 0, mapTaskSchemaError(err)
 	}
 	return mapTasks(tasks), total, nil
 }
@@ -461,7 +464,7 @@ func (r *repository) GetTaskByID(ctx context.Context, q GetTaskQuery) (*entity.L
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, mapTaskSchemaError(err)
 	}
 	out := mapTask(task)
 	return &out, nil
@@ -473,7 +476,7 @@ func (r *repository) UpdateTask(ctx context.Context, input UpdateTaskInput) (*en
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, mapTaskSchemaError(err)
 	}
 	updates := map[string]any{"updated_at": time.Now()}
 	if input.Status != nil {
@@ -504,10 +507,10 @@ func (r *repository) UpdateTask(ctx context.Context, input UpdateTaskInput) (*en
 		updates["completed_at"] = input.CompletedAt
 	}
 	if err := r.db.WithContext(ctx).Model(&task).Updates(updates).Error; err != nil {
-		return nil, err
+		return nil, mapTaskSchemaError(err)
 	}
 	if err := r.db.WithContext(ctx).First(&task, input.ID).Error; err != nil {
-		return nil, err
+		return nil, mapTaskSchemaError(err)
 	}
 	out := mapTask(task)
 	return &out, nil
@@ -630,6 +633,27 @@ func mapItem(item models.LargeWorkItem) entity.LargeWorkItem {
 	})
 	out.Teams = teams
 	return out
+}
+
+func mapTaskSchemaError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if isSchemaUnavailableError(err) {
+		return errors.Join(ErrSchemaUnavailable, err)
+	}
+	return err
+}
+
+func isSchemaUnavailableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	if strings.Contains(lower, "sqlstate 42p01") || strings.Contains(lower, "sqlstate 42703") || strings.Contains(lower, "no such table") {
+		return true
+	}
+	return strings.Contains(lower, "large_work_tasks") && (strings.Contains(lower, "does not exist") || strings.Contains(lower, "missing"))
 }
 
 func mapTask(task models.LargeWorkTask) entity.LargeWorkTask {

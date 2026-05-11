@@ -32,6 +32,42 @@ Common settings to verify:
 - Do not rename columns during architecture refactor work.
 - If explicit migrations are introduced later, keep them idempotent and ordered.
 
+## Large-work production schema gate: `large_work_tasks`
+
+Use the backend's migration path, not ad-hoc SQL execution through an external console/tool. The repo currently owns schema through GORM `AutoMigrate` guarded by `database.auto_migrate`; there is no active Goose runner wired into deploy/startup yet.
+
+Root cause found on 2026-05-11:
+
+- `internal/models/models.go` already defines `LargeWorkTask` with `TableName() == "large_work_tasks"`.
+- `pkg/db/db.go` registered `LargeWorkItem` and `LargeWorkItemTeam` in `MigrationModels()` but missed `LargeWorkTask`.
+- Therefore even when `auto_migrate: true` is used, startup cannot create `large_work_tasks`.
+
+Correct operational path:
+
+1. Keep `models.LargeWorkTask` registered in `MigrationModels()`.
+2. Deploy a backend build containing that registration.
+3. Run the backend migration path once with `database.auto_migrate: true` against the target DB, or run the app in a controlled migration job using the same config.
+4. Switch `database.auto_migrate` back to `false` for normal production runtime if that is the deployment convention.
+5. Post-check production schema:
+
+```sql
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name IN ('large_work_items', 'large_work_item_teams', 'large_work_tasks')
+ORDER BY table_name;
+
+SELECT indexname
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND tablename = 'large_work_tasks'
+ORDER BY indexname;
+```
+
+Expected post-check: `large_work_tasks` exists with indexes generated from the GORM model tags, including plan/sequence and assigned-team/status indexes. Then smoke `GET /v1/large-works/1/tasks` and `GET /v1/large-work-tasks/my-todos` with an authenticated team user; both should avoid 500 errors caused by the missing table.
+
+If the project is later standardized on Goose like the reference backend, add a real Goose migration runner/script first, then move this schema ownership there. Do not manually run one-off SQL through MCP/console because that bypasses version/migration ownership and can leave deploy state unclear.
+
 ## Restart procedure
 
 1. Stop the running API.

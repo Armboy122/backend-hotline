@@ -100,6 +100,7 @@ func MigrationModels() []any {
 		&models.TeamPlan{},
 		&models.LargeWorkItem{},
 		&models.LargeWorkItemTeam{},
+		&models.LargeWorkTask{},
 	}
 }
 
