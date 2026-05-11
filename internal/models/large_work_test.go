@@ -75,6 +75,52 @@ func TestLargeWorkParticipantTeamModelMatchesMobilizationContract(t *testing.T) 
 	}
 }
 
+func TestLargeWorkTaskModelMatchesExecutionPointContract(t *testing.T) {
+	if got := (LargeWorkTask{}).TableName(); got != "large_work_tasks" {
+		t.Fatalf("LargeWorkTask table name = %q, want large_work_tasks", got)
+	}
+
+	typ := reflect.TypeOf(LargeWorkTask{})
+	assertLargeWorkField(t, typ, "ID", "column:id")
+	assertLargeWorkField(t, typ, "LargeWorkItemID", "column:large_work_item_id")
+	assertLargeWorkField(t, typ, "AssignedTeamID", "column:assigned_team_id")
+	assertLargeWorkField(t, typ, "Sequence", "column:sequence")
+	assertLargeWorkField(t, typ, "PointLabel", "column:point_label")
+	assertLargeWorkField(t, typ, "Latitude", "type:decimal(9,6);column:latitude")
+	assertLargeWorkField(t, typ, "Longitude", "type:decimal(9,6);column:longitude")
+	assertLargeWorkField(t, typ, "WorkType", "column:work_type")
+	assertLargeWorkField(t, typ, "WorkDetail", "column:work_detail")
+	assertLargeWorkField(t, typ, "PointCount", "column:point_count")
+	assertLargeWorkField(t, typ, "TreeCount", "column:tree_count")
+	assertLargeWorkField(t, typ, "ItemCount", "column:item_count")
+	assertLargeWorkField(t, typ, "Notes", "column:notes")
+	assertLargeWorkField(t, typ, "Status", "default:todo;column:status")
+	assertLargeWorkField(t, typ, "BeforePhotoURLs", "type:text[];column:before_photo_urls")
+	assertLargeWorkField(t, typ, "AfterPhotoURLs", "type:text[];column:after_photo_urls")
+	assertLargeWorkField(t, typ, "CompletionNote", "column:completion_note")
+	assertLargeWorkField(t, typ, "StartedByUserID", "column:started_by_user_id")
+	assertLargeWorkField(t, typ, "StartedAt", "column:started_at")
+	assertLargeWorkField(t, typ, "CompletedByUserID", "column:completed_by_user_id")
+	assertLargeWorkField(t, typ, "CompletedAt", "column:completed_at")
+	assertLargeWorkField(t, typ, "Metadata", "type:jsonb;column:metadata")
+	assertLargeWorkField(t, typ, "CreatedAt", "column:created_at")
+	assertLargeWorkField(t, typ, "UpdatedAt", "column:updated_at")
+
+	task := LargeWorkTask{
+		LargeWorkItemID: 501,
+		AssignedTeamID:  12,
+		Sequence:        1,
+		PointLabel:      "P1",
+		Status:          LargeWorkTaskStatusTodo,
+		BeforePhotoURLs: StringArray{},
+		AfterPhotoURLs:  StringArray{},
+		Metadata:        []byte(`{"source":"worker-flow"}`),
+	}
+	if task.Status != "todo" {
+		t.Fatalf("todo status constant = %q, want todo", task.Status)
+	}
+}
+
 func TestLargeWorkStatusAndParticipantValuesStaySmallForMVP(t *testing.T) {
 	statuses := []string{
 		LargeWorkStatusDraft,
@@ -99,6 +145,17 @@ func TestLargeWorkStatusAndParticipantValuesStaySmallForMVP(t *testing.T) {
 	}
 	if want := []string{"assigned", "acknowledged"}; !reflect.DeepEqual(participantStatuses, want) {
 		t.Fatalf("participant statuses = %#v, want %#v", participantStatuses, want)
+	}
+
+	taskStatuses := []string{
+		LargeWorkTaskStatusTodo,
+		LargeWorkTaskStatusInProgress,
+		LargeWorkTaskStatusDone,
+		LargeWorkTaskStatusBlocked,
+		LargeWorkTaskStatusCancelled,
+	}
+	if want := []string{"todo", "in_progress", "done", "blocked", "cancelled"}; !reflect.DeepEqual(taskStatuses, want) {
+		t.Fatalf("task statuses = %#v, want %#v", taskStatuses, want)
 	}
 }
 

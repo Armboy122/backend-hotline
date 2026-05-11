@@ -114,8 +114,78 @@ func toResponse(item *entity.LargeWorkItem, actor entity.Actor) dto.LargeWorkRes
 	resp.Teams = teams
 	resp.Actions.CanEdit = actor.CanUpdateLargeWork(item)
 	resp.Actions.CanCancel = actor.CanCancelLargeWork(item)
+	resp.Actions.CanAssignTasks = actor.CanAssignLargeWorkTasks(item, 0)
 	resp.Actions.CanStartDailyReport = false
 	return resp
+}
+
+func toTaskResponse(task entity.LargeWorkTask) dto.LargeWorkTaskResponse {
+	resp := dto.LargeWorkTaskResponse{
+		ID: task.ID, LargeWorkItemID: task.LargeWorkItemID, AssignedTeamID: task.AssignedTeamID, Sequence: task.Sequence,
+		PointLabel: task.PointLabel, Latitude: task.Latitude, Longitude: task.Longitude, WorkType: task.WorkType,
+		WorkDetail: task.WorkDetail, PointCount: task.PointCount, TreeCount: task.TreeCount, ItemCount: task.ItemCount,
+		Notes: task.Notes, Status: task.Status, BeforePhotoURLs: task.BeforePhotoURLs, AfterPhotoURLs: task.AfterPhotoURLs,
+		CompletionNote: task.CompletionNote, StartedByUserID: task.StartedByUserID, CompletedByUserID: task.CompletedByUserID, Metadata: task.Metadata,
+	}
+	if resp.BeforePhotoURLs == nil {
+		resp.BeforePhotoURLs = []string{}
+	}
+	if resp.AfterPhotoURLs == nil {
+		resp.AfterPhotoURLs = []string{}
+	}
+	if task.StartedAt != nil {
+		v := task.StartedAt.UTC().Format(time.RFC3339)
+		resp.StartedAt = &v
+	}
+	if task.CompletedAt != nil {
+		v := task.CompletedAt.UTC().Format(time.RFC3339)
+		resp.CompletedAt = &v
+	}
+	return resp
+}
+
+func toTaskResponses(tasks []entity.LargeWorkTask) []dto.LargeWorkTaskResponse {
+	out := make([]dto.LargeWorkTaskResponse, 0, len(tasks))
+	for _, task := range tasks {
+		out = append(out, toTaskResponse(task))
+	}
+	return out
+}
+
+func toOverviewResponse(out *service.OverviewOutput, actor entity.Actor) dto.OverviewResponse {
+	teamProgress := make([]dto.TeamProgressResponse, 0, len(out.TeamProgress))
+	for _, team := range out.TeamProgress {
+		teamProgress = append(teamProgress, dto.TeamProgressResponse{
+			AssignedTeamID: team.AssignedTeamID,
+			Total:          team.Total,
+			Todo:           team.Todo,
+			InProgress:     team.InProgress,
+			Done:           team.Done,
+			Blocked:        team.Blocked,
+			Cancelled:      team.Cancelled,
+		})
+	}
+	return dto.OverviewResponse{
+		Plan: toResponse(&out.Plan, actor),
+		Progress: dto.OverviewProgressResponse{
+			Total:      out.Progress.Total,
+			Todo:       out.Progress.Todo,
+			InProgress: out.Progress.InProgress,
+			Done:       out.Progress.Done,
+			Blocked:    out.Progress.Blocked,
+			Cancelled:  out.Progress.Cancelled,
+		},
+		TeamProgress: teamProgress,
+	}
+}
+
+func parseIDParam(ctx *gin.Context, name string, message string) (int64, bool) {
+	id, err := strconv.ParseInt(ctx.Param(name), 10, 64)
+	if err != nil || id <= 0 {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "INVALID_ID", Message: message}})
+		return 0, false
+	}
+	return id, true
 }
 
 func mapErr(err error) int {
@@ -124,7 +194,7 @@ func mapErr(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, service.ErrForbidden):
 		return http.StatusForbidden
-	case errors.Is(err, service.ErrInvalidID), errors.Is(err, service.ErrInvalidOwnerTeam), errors.Is(err, service.ErrInvalidTitle), errors.Is(err, service.ErrInvalidLocation), errors.Is(err, service.ErrInvalidStartDate), errors.Is(err, service.ErrInvalidParticipantTeams), errors.Is(err, service.ErrInvalidStatus), errors.Is(err, service.ErrInvalidDateRange), errors.Is(err, service.ErrInvalidStateTransition):
+	case errors.Is(err, service.ErrInvalidID), errors.Is(err, service.ErrInvalidOwnerTeam), errors.Is(err, service.ErrInvalidTitle), errors.Is(err, service.ErrInvalidLocation), errors.Is(err, service.ErrInvalidStartDate), errors.Is(err, service.ErrInvalidParticipantTeams), errors.Is(err, service.ErrInvalidStatus), errors.Is(err, service.ErrInvalidDateRange), errors.Is(err, service.ErrInvalidStateTransition), errors.Is(err, service.ErrInvalidTask), errors.Is(err, service.ErrPhotoRequired):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
@@ -319,4 +389,170 @@ func (c *Controller) Cancel(ctx *gin.Context) {
 
 func (c *Controller) Attachments(ctx *gin.Context) {
 	ctx.JSON(http.StatusNotImplemented, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "NOT_IMPLEMENTED", Message: "attachments are not ready yet"}})
+}
+
+func (c *Controller) GetOverview(ctx *gin.Context) {
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "UNAUTHORIZED", Message: "Unauthorized"}})
+		return
+	}
+	id, ok := parseIDParam(ctx, "id", "Invalid large work item ID")
+	if !ok {
+		return
+	}
+	out, err := c.service.GetOverview(ctx.Request.Context(), actor, id)
+	if err != nil {
+		ctx.JSON(mapErr(err), dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "ERROR", Message: err.Error()}})
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.StandardResponse{Success: true, Data: toOverviewResponse(out, actor)})
+}
+
+func (c *Controller) ReplaceTasks(ctx *gin.Context) {
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "UNAUTHORIZED", Message: "Unauthorized"}})
+		return
+	}
+	id, ok := parseIDParam(ctx, "id", "Invalid large work item ID")
+	if !ok {
+		return
+	}
+	var req dto.ReplaceTasksRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "VALIDATION_ERROR", Message: err.Error()}})
+		return
+	}
+	input := service.ReplaceTasksInput{Tasks: make([]service.TaskPointInput, 0, len(req.Tasks))}
+	for _, t := range req.Tasks {
+		input.Tasks = append(input.Tasks, service.TaskPointInput{AssignedTeamID: t.AssignedTeamID, Sequence: t.Sequence, PointLabel: t.PointLabel, Latitude: t.Latitude, Longitude: t.Longitude, WorkType: t.WorkType, WorkDetail: t.WorkDetail, PointCount: t.PointCount, TreeCount: t.TreeCount, ItemCount: t.ItemCount, Notes: t.Notes, Metadata: t.Metadata})
+	}
+	tasks, err := c.service.ReplaceTasks(ctx.Request.Context(), actor, id, input)
+	if err != nil {
+		ctx.JSON(mapErr(err), dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "ERROR", Message: err.Error()}})
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.StandardResponse{Success: true, Data: toTaskResponses(tasks)})
+}
+
+func (c *Controller) ListTasks(ctx *gin.Context) {
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "UNAUTHORIZED", Message: "Unauthorized"}})
+		return
+	}
+	id, ok := parseIDParam(ctx, "id", "Invalid large work item ID")
+	if !ok {
+		return
+	}
+	tasks, err := c.service.ListTasks(ctx.Request.Context(), actor, id)
+	if err != nil {
+		ctx.JSON(mapErr(err), dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "ERROR", Message: err.Error()}})
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.StandardResponse{Success: true, Data: toTaskResponses(tasks)})
+}
+
+func (c *Controller) MyTodos(ctx *gin.Context) {
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "UNAUTHORIZED", Message: "Unauthorized"}})
+		return
+	}
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
+	out, err := c.service.MyTodos(ctx.Request.Context(), actor, service.MyTodosInput{Page: page, Limit: limit})
+	if err != nil {
+		ctx.JSON(mapErr(err), dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "ERROR", Message: err.Error()}})
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.StandardResponse{Success: true, Data: toTaskResponses(out.Items), Meta: &dto.Meta{Page: out.Page, Limit: out.Limit, Total: out.Total}})
+}
+
+func (c *Controller) StartTask(ctx *gin.Context) {
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "UNAUTHORIZED", Message: "Unauthorized"}})
+		return
+	}
+	id, ok := parseIDParam(ctx, "taskId", "Invalid large work task ID")
+	if !ok {
+		return
+	}
+	task, err := c.service.StartTask(ctx.Request.Context(), actor, id)
+	if err != nil {
+		ctx.JSON(mapErr(err), dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "ERROR", Message: err.Error()}})
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.StandardResponse{Success: true, Data: toTaskResponse(*task)})
+}
+
+func (c *Controller) AttachTaskPhoto(ctx *gin.Context) {
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "UNAUTHORIZED", Message: "Unauthorized"}})
+		return
+	}
+	id, ok := parseIDParam(ctx, "taskId", "Invalid large work task ID")
+	if !ok {
+		return
+	}
+	var req dto.TaskExecutionPhotoRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "VALIDATION_ERROR", Message: err.Error()}})
+		return
+	}
+	task, err := c.service.AttachTaskPhoto(ctx.Request.Context(), actor, id, req.Kind, req.URL)
+	if err != nil {
+		ctx.JSON(mapErr(err), dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "ERROR", Message: err.Error()}})
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.StandardResponse{Success: true, Data: toTaskResponse(*task)})
+}
+
+func (c *Controller) CompleteTask(ctx *gin.Context) {
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "UNAUTHORIZED", Message: "Unauthorized"}})
+		return
+	}
+	id, ok := parseIDParam(ctx, "taskId", "Invalid large work task ID")
+	if !ok {
+		return
+	}
+	var req dto.CompleteTaskRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "VALIDATION_ERROR", Message: err.Error()}})
+		return
+	}
+	task, err := c.service.CompleteTask(ctx.Request.Context(), actor, id, service.CompleteTaskInput{AfterPhotoURLs: req.AfterPhotoURLs, CompletionNote: req.CompletionNote})
+	if err != nil {
+		ctx.JSON(mapErr(err), dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "ERROR", Message: err.Error()}})
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.StandardResponse{Success: true, Data: toTaskResponse(*task)})
+}
+
+func (c *Controller) BlockTask(ctx *gin.Context) {
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "UNAUTHORIZED", Message: "Unauthorized"}})
+		return
+	}
+	id, ok := parseIDParam(ctx, "taskId", "Invalid large work task ID")
+	if !ok {
+		return
+	}
+	var req dto.BlockTaskRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "VALIDATION_ERROR", Message: err.Error()}})
+		return
+	}
+	task, err := c.service.BlockTask(ctx.Request.Context(), actor, id, req.Reason)
+	if err != nil {
+		ctx.JSON(mapErr(err), dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "ERROR", Message: err.Error()}})
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.StandardResponse{Success: true, Data: toTaskResponse(*task)})
 }

@@ -12,10 +12,15 @@ import (
 )
 
 type fakeRepository struct {
-	capturedList   repo.ListQuery
-	capturedGet    repo.GetQuery
-	capturedCreate repo.CreateInput
-	capturedUpdate repo.UpdateInput
+	capturedList                    repo.ListQuery
+	capturedGet                     repo.GetQuery
+	capturedCreate                  repo.CreateInput
+	capturedUpdate                  repo.UpdateInput
+	capturedReplace                 repo.ReplaceTasksInput
+	capturedReplaceWithParticipants repo.ReplaceTasksAndParticipantsInput
+	capturedListTasks               repo.ListTasksQuery
+	capturedListAssigned            repo.ListAssignedTasksQuery
+	capturedUpdateTask              repo.UpdateTaskInput
 
 	listItems []entity.LargeWorkItem
 	listTotal int64
@@ -30,6 +35,20 @@ type fakeRepository struct {
 
 	updateItem *entity.LargeWorkItem
 	updateErr  error
+
+	replaceTasks                 []entity.LargeWorkTask
+	replaceErr                   error
+	replaceWithParticipantsTasks []entity.LargeWorkTask
+	replaceWithParticipantsErr   error
+	listTasks                    []entity.LargeWorkTask
+	listTasksErr                 error
+	assignedTasks                []entity.LargeWorkTask
+	assignedTotal                int64
+	assignedErr                  error
+	getTask                      *entity.LargeWorkTask
+	getTaskErr                   error
+	updateTask                   *entity.LargeWorkTask
+	updateTaskErr                error
 }
 
 func (f *fakeRepository) List(_ context.Context, q repo.ListQuery) ([]entity.LargeWorkItem, int64, error) {
@@ -50,6 +69,29 @@ func (f *fakeRepository) Create(_ context.Context, input repo.CreateInput) (*ent
 func (f *fakeRepository) Update(_ context.Context, input repo.UpdateInput) (*entity.LargeWorkItem, error) {
 	f.capturedUpdate = input
 	return f.updateItem, f.updateErr
+}
+func (f *fakeRepository) ReplaceTasks(_ context.Context, input repo.ReplaceTasksInput) ([]entity.LargeWorkTask, error) {
+	f.capturedReplace = input
+	return f.replaceTasks, f.replaceErr
+}
+func (f *fakeRepository) ReplaceTasksAndParticipants(_ context.Context, input repo.ReplaceTasksAndParticipantsInput) ([]entity.LargeWorkTask, error) {
+	f.capturedReplaceWithParticipants = input
+	return f.replaceWithParticipantsTasks, f.replaceWithParticipantsErr
+}
+func (f *fakeRepository) ListTasksByPlan(_ context.Context, q repo.ListTasksQuery) ([]entity.LargeWorkTask, error) {
+	f.capturedListTasks = q
+	return f.listTasks, f.listTasksErr
+}
+func (f *fakeRepository) ListAssignedTasks(_ context.Context, q repo.ListAssignedTasksQuery) ([]entity.LargeWorkTask, int64, error) {
+	f.capturedListAssigned = q
+	return f.assignedTasks, f.assignedTotal, f.assignedErr
+}
+func (f *fakeRepository) GetTaskByID(_ context.Context, q repo.GetTaskQuery) (*entity.LargeWorkTask, error) {
+	return f.getTask, f.getTaskErr
+}
+func (f *fakeRepository) UpdateTask(_ context.Context, input repo.UpdateTaskInput) (*entity.LargeWorkTask, error) {
+	f.capturedUpdateTask = input
+	return f.updateTask, f.updateTaskErr
 }
 
 func actor(role string, teamID *int64) entity.Actor {
@@ -99,18 +141,35 @@ func TestCreateRejectsInsufficientTeams(t *testing.T) {
 	}
 }
 
-func TestCreateRejectsTeamLeadForAnyOwnerTeamInMVP(t *testing.T) {
+func TestCreateAllowsTeamLeadForOwnTeamAndRejectsOtherTeam(t *testing.T) {
 	ownerTeamID := int64(7)
-	svc := NewService(&fakeRepository{})
-	_, err := svc.Create(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), CreateInput{
+	repo := &fakeRepository{createItem: &entity.LargeWorkItem{ID: 1, OwnerTeamID: ownerTeamID}}
+	svc := NewService(repo)
+
+	out, err := svc.Create(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), CreateInput{
 		OwnerTeamID:        ownerTeamID,
 		ParticipantTeamIDs: []int64{ownerTeamID, 9},
 		Title:              "งานระดมทีม",
 		StartDate:          mustDate(t, "2026-06-10"),
 		LocationText:       "Station A",
 	})
+	if err != nil {
+		t.Fatalf("team lead own-team create got %v, want nil", err)
+	}
+	if out == nil || repo.capturedCreate.CreatedByUserID != 1 {
+		t.Fatalf("team lead create result = %#v captured = %#v, want created item with actor id", out, repo.capturedCreate)
+	}
+
+	otherTeamID := int64(8)
+	_, err = svc.Create(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), CreateInput{
+		OwnerTeamID:        otherTeamID,
+		ParticipantTeamIDs: []int64{otherTeamID, 9},
+		Title:              "งานระดมทีม",
+		StartDate:          mustDate(t, "2026-06-10"),
+		LocationText:       "Station A",
+	})
 	if !errors.Is(err, ErrForbidden) {
-		t.Fatalf("got %v, want ErrForbidden", err)
+		t.Fatalf("team lead other-team create got %v, want ErrForbidden", err)
 	}
 }
 
@@ -206,23 +265,35 @@ func TestListUsesRepositoryScopedPaginationForTeamActors(t *testing.T) {
 	}
 }
 
-func TestUpdateAndCancelRestrictByActorRoleAndEditableState(t *testing.T) {
+func TestUpdateAndCancelAllowTeamLeadForOwnTeamEditableWork(t *testing.T) {
 	ownerTeamID := int64(7)
-	existing := &entity.LargeWorkItem{ID: 99, OwnerTeamID: 7, Status: entity.LargeWorkStatusPlanned}
+	existing := &entity.LargeWorkItem{ID: 99, OwnerTeamID: ownerTeamID, CreatedByUserID: 1, Status: entity.LargeWorkStatusPlanned}
 	repo := &fakeRepository{getItem: existing, updateItem: existing}
 	svc := NewService(repo)
 
-	if _, err := svc.Update(context.Background(), actor(policy.RoleAdmin, &ownerTeamID), UpdateInput{ID: 99, Title: strPtr("updated")}); err != nil {
-		t.Fatalf("unexpected update error: %v", err)
+	if _, err := svc.Update(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), UpdateInput{ID: 99, Title: strPtr("updated")}); err != nil {
+		t.Fatalf("team lead own-team update error: %v", err)
 	}
 	if repo.capturedUpdate.ID != 99 {
 		t.Fatalf("update id = %d, want 99", repo.capturedUpdate.ID)
 	}
-	if _, err := svc.Cancel(context.Background(), actor(policy.RoleAdmin, &ownerTeamID), 99); err != nil {
-		t.Fatalf("unexpected cancel error: %v", err)
+	if _, err := svc.Cancel(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 99); err != nil {
+		t.Fatalf("team lead own-team cancel error: %v", err)
 	}
-	if _, err := svc.Update(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), UpdateInput{ID: 99, Title: strPtr("updated")}); !errors.Is(err, ErrForbidden) {
-		t.Fatalf("team lead update got %v, want ErrForbidden", err)
+
+	otherTeamID := int64(8)
+	createdByLead := &entity.LargeWorkItem{ID: 100, OwnerTeamID: otherTeamID, CreatedByUserID: 1, Status: entity.LargeWorkStatusPlanned}
+	if _, err := NewService(&fakeRepository{getItem: createdByLead, updateItem: createdByLead}).Update(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), UpdateInput{ID: 100, Title: strPtr("creator update")}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("team lead creator update for another team got %v, want ErrForbidden", err)
+	}
+
+	unrelated := &entity.LargeWorkItem{ID: 101, OwnerTeamID: otherTeamID, CreatedByUserID: 999, Status: entity.LargeWorkStatusPlanned}
+	if _, err := NewService(&fakeRepository{getItem: unrelated, updateItem: unrelated}).Update(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), UpdateInput{ID: 101, Title: strPtr("blocked")}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("team lead unrelated update got %v, want ErrForbidden", err)
+	}
+
+	if _, err := NewService(&fakeRepository{getItem: existing, updateItem: existing}).Update(context.Background(), actor(policy.RoleUser, &ownerTeamID), UpdateInput{ID: 99, Title: strPtr("blocked")}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("user update got %v, want ErrForbidden", err)
 	}
 
 	for _, status := range []string{entity.LargeWorkStatusInProgress, entity.LargeWorkStatusCompleted, entity.LargeWorkStatusCancelled} {
@@ -309,3 +380,179 @@ func mustDate(t *testing.T, raw string) time.Time {
 }
 
 func strPtr(v string) *string { return &v }
+
+func TestOverviewIncludesProgressAndAllowsAllTeamsToView(t *testing.T) {
+	ownerTeamID := int64(7)
+	workerTeamID := int64(8)
+	unrelatedTeamID := int64(99)
+	plan := &entity.LargeWorkItem{ID: 501, OwnerTeamID: ownerTeamID, Status: entity.LargeWorkStatusPlanned, Teams: []entity.LargeWorkTeam{{ID: ownerTeamID}, {ID: workerTeamID}}}
+	repo := &fakeRepository{getItem: plan, listTasks: []entity.LargeWorkTask{
+		{ID: 1, LargeWorkItemID: 501, AssignedTeamID: workerTeamID, Status: entity.LargeWorkTaskStatusTodo},
+		{ID: 2, LargeWorkItemID: 501, AssignedTeamID: workerTeamID, Status: entity.LargeWorkTaskStatusDone},
+		{ID: 3, LargeWorkItemID: 501, AssignedTeamID: ownerTeamID, Status: entity.LargeWorkTaskStatusBlocked},
+	}}
+	svc := NewService(repo)
+
+	out, err := svc.GetOverview(context.Background(), actor(policy.RoleUser, &unrelatedTeamID), 501)
+	if err != nil {
+		t.Fatalf("overview error: %v", err)
+	}
+	if out.Plan.ID != 501 || out.Progress.Total != 3 || out.Progress.Done != 1 || out.Progress.Blocked != 1 || out.Progress.Todo != 1 {
+		t.Fatalf("overview = %#v", out)
+	}
+	if len(out.TeamProgress) != 2 || out.TeamProgress[0].AssignedTeamID != workerTeamID || out.TeamProgress[0].Total != 2 {
+		t.Fatalf("team progress = %#v", out.TeamProgress)
+	}
+}
+
+func TestReplaceTasksAutoAddsAssignedTeamsAndRequiresPlanManager(t *testing.T) {
+	ownerTeamID := int64(7)
+	newTeamID := int64(9)
+	plan := &entity.LargeWorkItem{ID: 501, OwnerTeamID: ownerTeamID, Status: entity.LargeWorkStatusPlanned, Teams: []entity.LargeWorkTeam{{ID: ownerTeamID}, {ID: 8}}}
+	repo := &fakeRepository{getItem: plan, replaceWithParticipantsTasks: []entity.LargeWorkTask{{ID: 11, LargeWorkItemID: 501, AssignedTeamID: newTeamID}}}
+	svc := NewService(repo)
+
+	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{AssignedTeamID: newTeamID, Sequence: 1, PointLabel: "P1", WorkType: "tree"}}})
+	if err != nil {
+		t.Fatalf("replace tasks error: %v", err)
+	}
+	if repo.capturedReplaceWithParticipants.ParticipantTeamIDs == nil || len(repo.capturedReplaceWithParticipants.ParticipantTeamIDs) != 3 {
+		t.Fatalf("participant update = %#v, want existing teams plus assigned team", repo.capturedReplaceWithParticipants.ParticipantTeamIDs)
+	}
+	if repo.capturedReplaceWithParticipants.LargeWorkItemID != 501 || len(repo.capturedReplaceWithParticipants.Tasks) != 1 || repo.capturedReplaceWithParticipants.Tasks[0].Status != entity.LargeWorkTaskStatusTodo {
+		t.Fatalf("replace capture = %#v", repo.capturedReplaceWithParticipants)
+	}
+
+	otherTeamID := int64(10)
+	_, err = NewService(&fakeRepository{getItem: plan}).ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &otherTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{AssignedTeamID: newTeamID, Sequence: 1, PointLabel: "P1", WorkType: "tree"}}})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("other team lead replace got %v, want ErrForbidden", err)
+	}
+}
+
+func TestMyTodosStartPhotoCompleteAndBlockEnforceOwnTeamAndPhotos(t *testing.T) {
+	teamID := int64(8)
+	workerActor := actor(policy.RoleUser, &teamID)
+	task := &entity.LargeWorkTask{ID: 11, LargeWorkItemID: 501, AssignedTeamID: teamID, Status: entity.LargeWorkTaskStatusTodo}
+	plan := &entity.LargeWorkItem{ID: 501, OwnerTeamID: 7, Status: entity.LargeWorkStatusInProgress, Teams: []entity.LargeWorkTeam{{ID: teamID}}}
+	repo := &fakeRepository{getItem: plan, assignedTasks: []entity.LargeWorkTask{*task}, assignedTotal: 1, getTask: task, updateTask: task}
+	svc := NewService(repo)
+
+	todos, err := svc.MyTodos(context.Background(), workerActor, MyTodosInput{Page: 0, Limit: 500})
+	if err != nil || todos.Total != 1 || repo.capturedListAssigned.AssignedTeamID != teamID || todos.Limit != 100 {
+		t.Fatalf("my todos out=%#v err=%v captured=%#v", todos, err, repo.capturedListAssigned)
+	}
+	started, err := svc.StartTask(context.Background(), workerActor, 11)
+	if err != nil || started == nil || repo.capturedUpdateTask.Status == nil || *repo.capturedUpdateTask.Status != entity.LargeWorkTaskStatusInProgress || repo.capturedUpdateTask.StartedByUserID == nil {
+		t.Fatalf("start result=%#v err=%v update=%#v", started, err, repo.capturedUpdateTask)
+	}
+
+	if _, err := svc.AttachTaskPhoto(context.Background(), workerActor, 11, PhotoKindBefore, "   "); !errors.Is(err, ErrPhotoRequired) {
+		t.Fatalf("attach blank before got %v, want ErrPhotoRequired", err)
+	}
+	beforeURL := "https://cdn.example/before.jpg"
+	if _, err := svc.AttachTaskPhoto(context.Background(), workerActor, 11, PhotoKindBefore, beforeURL); err != nil {
+		t.Fatalf("attach before: %v", err)
+	}
+	if len(repo.capturedUpdateTask.BeforePhotoURLs) != 1 || repo.capturedUpdateTask.BeforePhotoURLs[0] != beforeURL {
+		t.Fatalf("before update = %#v", repo.capturedUpdateTask)
+	}
+
+	inProgress := &entity.LargeWorkTask{ID: 11, AssignedTeamID: teamID, Status: entity.LargeWorkTaskStatusInProgress, BeforePhotoURLs: []string{beforeURL}}
+	repo.getTask = inProgress
+	if _, err := svc.CompleteTask(context.Background(), workerActor, 11, CompleteTaskInput{CompletionNote: "done"}); !errors.Is(err, ErrPhotoRequired) {
+		t.Fatalf("complete without after got %v, want ErrPhotoRequired", err)
+	}
+	if _, err := svc.CompleteTask(context.Background(), workerActor, 11, CompleteTaskInput{AfterPhotoURLs: []string{""}, CompletionNote: "done"}); !errors.Is(err, ErrPhotoRequired) {
+		t.Fatalf("complete with empty after photo got %v, want ErrPhotoRequired", err)
+	}
+	done, err := svc.CompleteTask(context.Background(), workerActor, 11, CompleteTaskInput{AfterPhotoURLs: []string{"https://cdn.example/after.jpg"}, CompletionNote: "done"})
+	if err != nil || done == nil || repo.capturedUpdateTask.Status == nil || *repo.capturedUpdateTask.Status != entity.LargeWorkTaskStatusDone || repo.capturedUpdateTask.CompletedByUserID == nil {
+		t.Fatalf("complete result=%#v err=%v update=%#v", done, err, repo.capturedUpdateTask)
+	}
+
+	repo.getTask = task
+	blocked, err := svc.BlockTask(context.Background(), workerActor, 11, "access denied")
+	if err != nil || blocked == nil || repo.capturedUpdateTask.Status == nil || *repo.capturedUpdateTask.Status != entity.LargeWorkTaskStatusBlocked || repo.capturedUpdateTask.Notes == nil || *repo.capturedUpdateTask.Notes != "access denied" {
+		t.Fatalf("block result=%#v err=%v update=%#v", blocked, err, repo.capturedUpdateTask)
+	}
+
+	otherTeamID := int64(99)
+	_, err = svc.StartTask(context.Background(), actor(policy.RoleUser, &otherTeamID), 11)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("other team start got %v, want ErrForbidden", err)
+	}
+}
+
+func TestReplaceTasksRejectsExecutedTasksBeforeMutatingParticipants(t *testing.T) {
+	ownerTeamID := int64(7)
+	plan := &entity.LargeWorkItem{ID: 501, OwnerTeamID: ownerTeamID, Status: entity.LargeWorkStatusPlanned, Teams: []entity.LargeWorkTeam{{ID: ownerTeamID}, {ID: 8}}}
+	repo := &fakeRepository{getItem: plan, listTasks: []entity.LargeWorkTask{{ID: 1, LargeWorkItemID: 501, AssignedTeamID: 8, Status: entity.LargeWorkTaskStatusInProgress}}}
+	svc := NewService(repo)
+
+	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{AssignedTeamID: 8, Sequence: 1, PointLabel: "P1", WorkType: "tree"}}})
+	if !errors.Is(err, ErrInvalidStateTransition) {
+		t.Fatalf("replace with executed tasks got %v, want ErrInvalidStateTransition", err)
+	}
+	if repo.capturedReplaceWithParticipants.LargeWorkItemID != 0 || repo.capturedUpdate.ID != 0 {
+		t.Fatalf("mutation captured despite rejection: update=%#v replace=%#v", repo.capturedUpdate, repo.capturedReplaceWithParticipants)
+	}
+}
+
+func TestTaskExecutionRejectsInactiveParentPlan(t *testing.T) {
+	teamID := int64(8)
+	workerActor := actor(policy.RoleUser, &teamID)
+	for _, status := range []string{entity.LargeWorkStatusCompleted, entity.LargeWorkStatusCancelled} {
+		t.Run(status, func(t *testing.T) {
+			parent := &entity.LargeWorkItem{ID: 501, OwnerTeamID: 7, Status: status, Teams: []entity.LargeWorkTeam{{ID: teamID}}}
+			task := &entity.LargeWorkTask{ID: 11, LargeWorkItemID: 501, AssignedTeamID: teamID, Status: entity.LargeWorkTaskStatusTodo, BeforePhotoURLs: []string{"https://cdn.example/before.jpg"}}
+			repo := &fakeRepository{getItem: parent, getTask: task, updateTask: task}
+			svc := NewService(repo)
+
+			if _, err := svc.StartTask(context.Background(), workerActor, 11); !errors.Is(err, ErrInvalidStateTransition) {
+				t.Fatalf("start with parent %s got %v, want ErrInvalidStateTransition", status, err)
+			}
+			if _, err := svc.AttachTaskPhoto(context.Background(), workerActor, 11, PhotoKindBefore, "https://cdn.example/before2.jpg"); !errors.Is(err, ErrInvalidStateTransition) {
+				t.Fatalf("attach with parent %s got %v, want ErrInvalidStateTransition", status, err)
+			}
+
+			task.Status = entity.LargeWorkTaskStatusInProgress
+			if _, err := svc.CompleteTask(context.Background(), workerActor, 11, CompleteTaskInput{AfterPhotoURLs: []string{"https://cdn.example/after.jpg"}, CompletionNote: "done"}); !errors.Is(err, ErrInvalidStateTransition) {
+				t.Fatalf("complete with parent %s got %v, want ErrInvalidStateTransition", status, err)
+			}
+			if _, err := svc.BlockTask(context.Background(), workerActor, 11, "blocked"); !errors.Is(err, ErrInvalidStateTransition) {
+				t.Fatalf("block with parent %s got %v, want ErrInvalidStateTransition", status, err)
+			}
+			if repo.capturedUpdateTask.ID != 0 {
+				t.Fatalf("update captured despite inactive parent: %#v", repo.capturedUpdateTask)
+			}
+		})
+	}
+}
+
+func TestTaskMutationsRejectTerminalStatuses(t *testing.T) {
+	teamID := int64(8)
+	for _, status := range []string{entity.LargeWorkTaskStatusDone, entity.LargeWorkTaskStatusCancelled} {
+		t.Run(status, func(t *testing.T) {
+			task := &entity.LargeWorkTask{ID: 11, LargeWorkItemID: 501, AssignedTeamID: teamID, Status: status}
+			plan := &entity.LargeWorkItem{ID: 501, OwnerTeamID: 7, Status: entity.LargeWorkStatusInProgress, Teams: []entity.LargeWorkTeam{{ID: teamID}}}
+			repo := &fakeRepository{getItem: plan, getTask: task, updateTask: task}
+			svc := NewService(repo)
+			_, err := svc.BlockTask(context.Background(), actor(policy.RoleUser, &teamID), 11, "blocked")
+			if !errors.Is(err, ErrInvalidStateTransition) {
+				t.Fatalf("block %s got %v, want ErrInvalidStateTransition", status, err)
+			}
+			if repo.capturedUpdateTask.ID != 0 {
+				t.Fatalf("update captured despite terminal status: %#v", repo.capturedUpdateTask)
+			}
+
+			_, err = svc.AttachTaskPhoto(context.Background(), actor(policy.RoleUser, &teamID), 11, PhotoKindAfter, "https://cdn.example/after.jpg")
+			if !errors.Is(err, ErrInvalidStateTransition) {
+				t.Fatalf("attach photo to %s got %v, want ErrInvalidStateTransition", status, err)
+			}
+			if repo.capturedUpdateTask.ID != 0 {
+				t.Fatalf("photo update captured despite terminal status: %#v", repo.capturedUpdateTask)
+			}
+		})
+	}
+}

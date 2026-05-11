@@ -266,6 +266,12 @@ const (
 
 	LargeWorkParticipantStatusAssigned     = "assigned"
 	LargeWorkParticipantStatusAcknowledged = "acknowledged"
+
+	LargeWorkTaskStatusTodo       = "todo"
+	LargeWorkTaskStatusInProgress = "in_progress"
+	LargeWorkTaskStatusDone       = "done"
+	LargeWorkTaskStatusBlocked    = "blocked"
+	LargeWorkTaskStatusCancelled  = "cancelled"
 )
 
 // TeamPlan - แผนงานในพื้นที่รับผิดชอบของทีม
@@ -355,6 +361,43 @@ type LargeWorkItemTeam struct {
 
 func (LargeWorkItemTeam) TableName() string {
 	return "large_work_item_teams"
+}
+
+// LargeWorkTask stores per-point execution work assigned to a team under a large work plan.
+type LargeWorkTask struct {
+	ID                int64            `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	LargeWorkItemID   int64            `gorm:"not null;column:large_work_item_id;index:idx_large_work_tasks_plan_sequence,priority:1" json:"largeWorkItemId"`
+	AssignedTeamID    int64            `gorm:"not null;column:assigned_team_id;index:idx_large_work_tasks_assigned_team_status,priority:1" json:"assignedTeamId"`
+	Sequence          int              `gorm:"not null;column:sequence;index:idx_large_work_tasks_plan_sequence,priority:2" json:"sequence"`
+	PointLabel        string           `gorm:"not null;column:point_label" json:"pointLabel"`
+	Latitude          *decimal.Decimal `gorm:"type:decimal(9,6);column:latitude" json:"latitude,omitempty"`
+	Longitude         *decimal.Decimal `gorm:"type:decimal(9,6);column:longitude" json:"longitude,omitempty"`
+	WorkType          string           `gorm:"not null;column:work_type" json:"workType"`
+	WorkDetail        *string          `gorm:"column:work_detail" json:"workDetail,omitempty"`
+	PointCount        *int             `gorm:"column:point_count" json:"pointCount,omitempty"`
+	TreeCount         *int             `gorm:"column:tree_count" json:"treeCount,omitempty"`
+	ItemCount         *int             `gorm:"column:item_count" json:"itemCount,omitempty"`
+	Notes             *string          `gorm:"column:notes" json:"notes,omitempty"`
+	Status            string           `gorm:"not null;default:todo;column:status;index:idx_large_work_tasks_assigned_team_status,priority:2" json:"status"`
+	BeforePhotoURLs   StringArray      `gorm:"type:text[];column:before_photo_urls" json:"beforePhotoUrls"`
+	AfterPhotoURLs    StringArray      `gorm:"type:text[];column:after_photo_urls" json:"afterPhotoUrls"`
+	CompletionNote    *string          `gorm:"column:completion_note" json:"completionNote,omitempty"`
+	StartedByUserID   *int64           `gorm:"column:started_by_user_id" json:"startedByUserId,omitempty"`
+	StartedAt         *time.Time       `gorm:"type:timestamptz(6);column:started_at" json:"startedAt,omitempty"`
+	CompletedByUserID *int64           `gorm:"column:completed_by_user_id" json:"completedByUserId,omitempty"`
+	CompletedAt       *time.Time       `gorm:"type:timestamptz(6);column:completed_at" json:"completedAt,omitempty"`
+	Metadata          []byte           `gorm:"type:jsonb;column:metadata" json:"metadata,omitempty"`
+	CreatedAt         time.Time        `gorm:"not null;type:timestamptz(6);column:created_at;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt         time.Time        `gorm:"not null;type:timestamptz(6);column:updated_at" json:"updatedAt"`
+
+	LargeWorkItem *LargeWorkItem `gorm:"foreignKey:LargeWorkItemID;references:ID" json:"largeWorkItem,omitempty"`
+	AssignedTeam  *Team          `gorm:"foreignKey:AssignedTeamID;references:ID" json:"assignedTeam,omitempty"`
+	StartedBy     *User          `gorm:"foreignKey:StartedByUserID;references:ID" json:"startedBy,omitempty"`
+	CompletedBy   *User          `gorm:"foreignKey:CompletedByUserID;references:ID" json:"completedBy,omitempty"`
+}
+
+func (LargeWorkTask) TableName() string {
+	return "large_work_tasks"
 }
 
 // TaskDaily - รายงานประจำวัน

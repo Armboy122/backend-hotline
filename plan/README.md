@@ -59,6 +59,8 @@ The previous `internal/modules/<module>` direction is deprecated. Existing modul
 | 25 | [`17-contact-directory-implementation.md`](./17-contact-directory-implementation.md) | HNX-01 implemented backend contact directory routes, contact fields, RBAC, and verification notes |
 | 26 | [`17-planning-frontend-ux-contract.md`](./17-planning-frontend-ux-contract.md) | HNP-02 frontend UX/RBAC/API integration contract for planning calendar, team plan, contacts, daily-report prefill, and `งานระดมทีม` |
 | 27 | [`18-hnq-final-release-readiness-and-handoff-2026-05-10.md`](./18-hnq-final-release-readiness-and-handoff-2026-05-10.md) | HNQ final release readiness and handoff report covering implemented flows, role matrix, gates, risks, and manual validation steps |
+| 28 | [`28-hotline-large-work-execution-replan-2026-05-11.md`](./28-hotline-large-work-execution-replan-2026-05-11.md) | Product-approved replan for `งานระดมทีม`: teamlead creates/edits, assigns work to teams, worker todo execution with before/after photos |
+| 29 | [`29-hotline-large-work-execution-qa-handoff-2026-05-11.md`](./29-hotline-large-work-execution-qa-handoff-2026-05-11.md) | Integration QA handoff for `งานระดมทีม` execution gates, blockers, risks, and manual QA script |
 
 ## Phase Progress
 

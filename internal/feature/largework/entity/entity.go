@@ -37,6 +37,34 @@ type LargeWorkTeam struct {
 	ParticipantStatus string
 }
 
+type LargeWorkTask struct {
+	ID                int64
+	LargeWorkItemID   int64
+	AssignedTeamID    int64
+	Sequence          int
+	PointLabel        string
+	Latitude          *float64
+	Longitude         *float64
+	WorkType          string
+	WorkDetail        *string
+	PointCount        *int
+	TreeCount         *int
+	ItemCount         *int
+	Notes             *string
+	Status            string
+	BeforePhotoURLs   []string
+	AfterPhotoURLs    []string
+	CompletionNote    *string
+	StartedByUserID   *int64
+	StartedAt         *time.Time
+	CompletedByUserID *int64
+	CompletedAt       *time.Time
+	Metadata          map[string]any
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	DeletedAt         *time.Time
+}
+
 const (
 	LargeWorkStatusDraft      = "draft"
 	LargeWorkStatusPlanned    = "planned"
@@ -49,4 +77,10 @@ const (
 
 	LargeWorkParticipantStatusAssigned     = "assigned"
 	LargeWorkParticipantStatusAcknowledged = "acknowledged"
+
+	LargeWorkTaskStatusTodo       = "todo"
+	LargeWorkTaskStatusInProgress = "in_progress"
+	LargeWorkTaskStatusDone       = "done"
+	LargeWorkTaskStatusBlocked    = "blocked"
+	LargeWorkTaskStatusCancelled  = "cancelled"
 )

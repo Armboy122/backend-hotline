@@ -21,7 +21,7 @@ func TestLargeWorkActorPermissions(t *testing.T) {
 	}{
 		{name: "super admin full access", actor: Actor{Role: policy.RoleSuperAdmin}, itemTeam: &otherTeamID, canCreate: true, canUpdate: true, canCancel: true, canView: true},
 		{name: "admin full access", actor: Actor{Role: policy.RoleAdmin}, itemTeam: &otherTeamID, canCreate: true, canUpdate: true, canCancel: true, canView: true},
-		{name: "team lead can view but not manage own team in MVP", actor: Actor{Role: policy.RoleTeamLead, TeamID: &ownerTeamID}, itemTeam: &ownerTeamID, canCreate: false, canUpdate: false, canCancel: false, canView: true},
+		{name: "team lead can create and manage own team planned work", actor: Actor{UserID: 101, Role: policy.RoleTeamLead, TeamID: &ownerTeamID}, itemTeam: &ownerTeamID, canCreate: true, canUpdate: true, canCancel: true, canView: true},
 		{name: "team lead cannot manage other team", actor: Actor{Role: policy.RoleTeamLead, TeamID: &ownerTeamID}, itemTeam: &otherTeamID, canCreate: false, canUpdate: false, canCancel: false, canView: false},
 		{name: "user can only view own team item", actor: Actor{Role: policy.RoleUser, TeamID: &ownerTeamID}, itemTeam: &ownerTeamID, canCreate: false, canUpdate: false, canCancel: false, canView: true},
 		{name: "viewer can only view own team item", actor: Actor{Role: policy.RoleViewer, TeamID: &ownerTeamID}, itemTeam: &ownerTeamID, canCreate: false, canUpdate: false, canCancel: false, canView: true},
@@ -46,6 +46,51 @@ func TestLargeWorkActorPermissions(t *testing.T) {
 				t.Fatalf("CanViewLargeWork() = %v, want %v", got, tt.canView)
 			}
 		})
+	}
+}
+
+func TestLargeWorkActorTeamLeadCannotManageCreatedPlanForOtherTeam(t *testing.T) {
+	actorTeamID := int64(10)
+	otherTeamID := int64(11)
+	actor := Actor{UserID: 101, Role: policy.RoleTeamLead, TeamID: &actorTeamID}
+	item := &LargeWorkItem{OwnerTeamID: otherTeamID, CreatedByUserID: actor.UserID, Status: LargeWorkStatusPlanned}
+
+	if actor.CanUpdateLargeWork(item) {
+		t.Fatalf("team lead creator CanUpdateLargeWork() for another team = true, want false")
+	}
+	if actor.CanCancelLargeWork(item) {
+		t.Fatalf("team lead creator CanCancelLargeWork() for another team = true, want false")
+	}
+}
+
+func TestLargeWorkOverviewVisibleToAllAuthenticatedTeamRoles(t *testing.T) {
+	teamID := int64(10)
+	for _, role := range []string{policy.RoleSuperAdmin, policy.RoleAdmin, policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer} {
+		t.Run(role, func(t *testing.T) {
+			actor := Actor{Role: role, TeamID: &teamID}
+			if !actor.CanViewLargeWorkOverview() {
+				t.Fatalf("CanViewLargeWorkOverview() = false, want true for %s", role)
+			}
+		})
+	}
+	if (Actor{Role: ""}).CanViewLargeWorkOverview() {
+		t.Fatalf("anonymous CanViewLargeWorkOverview() = true, want false")
+	}
+}
+
+func TestLargeWorkActorTeamLeadCanAssignTasksForOwnPlanOnly(t *testing.T) {
+	ownerTeamID := int64(10)
+	otherTeamID := int64(11)
+	actor := Actor{UserID: 101, Role: policy.RoleTeamLead, TeamID: &ownerTeamID}
+
+	if !actor.CanAssignLargeWorkTasks(&LargeWorkItem{OwnerTeamID: ownerTeamID, Status: LargeWorkStatusPlanned}, otherTeamID) {
+		t.Fatalf("team lead CanAssignLargeWorkTasks() for own-team plan = false, want true")
+	}
+	if actor.CanAssignLargeWorkTasks(&LargeWorkItem{OwnerTeamID: otherTeamID, CreatedByUserID: actor.UserID, Status: LargeWorkStatusPlanned}, otherTeamID) {
+		t.Fatalf("team lead CanAssignLargeWorkTasks() for another-team created plan = true, want false")
+	}
+	if actor.CanAssignLargeWorkTasks(&LargeWorkItem{OwnerTeamID: otherTeamID, Status: LargeWorkStatusPlanned}, otherTeamID) {
+		t.Fatalf("team lead CanAssignLargeWorkTasks() for unrelated plan = true, want false")
 	}
 }
 
