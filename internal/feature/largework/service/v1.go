@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,18 +80,19 @@ type ListOutput struct {
 }
 
 type TaskPointInput struct {
-	AssignedTeamID int64
-	Sequence       int
-	PointLabel     string
-	Latitude       *float64
-	Longitude      *float64
-	WorkType       string
-	WorkDetail     *string
-	PointCount     *int
-	TreeCount      *int
-	ItemCount      *int
-	Notes          *string
-	Metadata       map[string]any
+	AssignedTeamID  int64
+	Sequence        int
+	PointLabel      string
+	Latitude        *float64
+	Longitude       *float64
+	WorkType        string
+	WorkDetail      *string
+	PointCount      *int
+	TreeCount       *int
+	ItemCount       *int
+	Notes           *string
+	BeforePhotoURLs []string
+	Metadata        map[string]any
 }
 
 type ReplaceTasksInput struct{ Tasks []TaskPointInput }
@@ -454,7 +456,7 @@ func (s *service) ReplaceTasks(ctx context.Context, actor entity.Actor, planID i
 	tasks := make([]repo.TaskInput, 0, len(input.Tasks))
 	nextSequenceByTeam := map[int64]int{}
 	for _, t := range input.Tasks {
-		if t.AssignedTeamID <= 0 || t.PointLabel == "" || t.WorkType == "" {
+		if t.AssignedTeamID <= 0 || t.Latitude == nil || t.Longitude == nil || t.WorkDetail == nil || strings.TrimSpace(*t.WorkDetail) == "" {
 			return nil, ErrInvalidTask
 		}
 		if _, ok := participantSet[t.AssignedTeamID]; !ok {
@@ -465,7 +467,15 @@ func (s *service) ReplaceTasks(ctx context.Context, actor entity.Actor, planID i
 			seq = nextSequenceByTeam[t.AssignedTeamID] + 1
 		}
 		nextSequenceByTeam[t.AssignedTeamID] = seq
-		tasks = append(tasks, repo.TaskInput{AssignedTeamID: t.AssignedTeamID, Sequence: seq, PointLabel: t.PointLabel, Latitude: t.Latitude, Longitude: t.Longitude, WorkType: t.WorkType, WorkDetail: t.WorkDetail, PointCount: t.PointCount, TreeCount: t.TreeCount, ItemCount: t.ItemCount, Notes: t.Notes, Status: entity.LargeWorkTaskStatusTodo, Metadata: t.Metadata})
+		pointLabel := strings.TrimSpace(t.PointLabel)
+		if pointLabel == "" {
+			pointLabel = defaultTaskPointLabel(t.Latitude, t.Longitude)
+		}
+		workType := strings.TrimSpace(t.WorkType)
+		if workType == "" {
+			workType = "location_note"
+		}
+		tasks = append(tasks, repo.TaskInput{AssignedTeamID: t.AssignedTeamID, Sequence: seq, PointLabel: pointLabel, Latitude: t.Latitude, Longitude: t.Longitude, WorkType: workType, WorkDetail: t.WorkDetail, PointCount: t.PointCount, TreeCount: t.TreeCount, ItemCount: t.ItemCount, Notes: t.Notes, Status: entity.LargeWorkTaskStatusTodo, BeforePhotoURLs: cleanPhotoURLs(t.BeforePhotoURLs), Metadata: t.Metadata})
 	}
 	existingTasks, err := s.repo.ListTasksByPlan(ctx, repo.ListTasksQuery{LargeWorkItemID: planID})
 	if err != nil {
@@ -482,6 +492,26 @@ func (s *service) ReplaceTasks(ctx context.Context, actor entity.Actor, planID i
 		return nil, mapRepositoryError(err)
 	}
 	return replaced, nil
+}
+
+func defaultTaskPointLabel(latitude *float64, longitude *float64) string {
+	if latitude == nil || longitude == nil {
+		return ""
+	}
+	lat := strings.TrimRight(strings.TrimRight(strconv.FormatFloat(*latitude, 'f', 6, 64), "0"), ".")
+	lng := strings.TrimRight(strings.TrimRight(strconv.FormatFloat(*longitude, 'f', 6, 64), "0"), ".")
+	return lat + ", " + lng
+}
+
+func cleanPhotoURLs(urls []string) []string {
+	out := make([]string, 0, len(urls))
+	for _, url := range urls {
+		trimmed := strings.TrimSpace(url)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func (s *service) ListTasks(ctx context.Context, actor entity.Actor, planID int64) ([]entity.LargeWorkTask, error) {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -381,6 +382,13 @@ func mustDate(t *testing.T, raw string) time.Time {
 
 func strPtr(v string) *string { return &v }
 
+func validTaskInput(teamID int64, label string) TaskPointInput {
+	lat := 13.756331
+	lng := 100.501762
+	detail := "รายละเอียดหน้างาน"
+	return TaskPointInput{AssignedTeamID: teamID, PointLabel: label, Latitude: &lat, Longitude: &lng, WorkType: "tree", WorkDetail: &detail}
+}
+
 func TestOverviewIncludesProgressAndAllowsAllTeamsToView(t *testing.T) {
 	ownerTeamID := int64(7)
 	workerTeamID := int64(8)
@@ -411,6 +419,7 @@ func TestReplaceTasksAllowsTeamLeadForParticipatingTeamsAndPreservesPlanningBoar
 	plan := &entity.LargeWorkItem{ID: 501, OwnerTeamID: ownerTeamID, Status: entity.LargeWorkStatusPlanned, Teams: []entity.LargeWorkTeam{{ID: ownerTeamID}, {ID: participantTeamID}}}
 	workDetail := "trim branches near primary line"
 	notes := "bring cones"
+	beforePhotoURLs := []string{"https://cdn.example/before-site.jpg"}
 	pointCount := 2
 	treeCount := 5
 	itemCount := 1
@@ -420,18 +429,19 @@ func TestReplaceTasksAllowsTeamLeadForParticipatingTeamsAndPreservesPlanningBoar
 	svc := NewService(repo)
 
 	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{
-		AssignedTeamID: participantTeamID,
-		Sequence:       3,
-		PointLabel:     "P3",
-		Latitude:       &lat,
-		Longitude:      &lng,
-		WorkType:       "tree_trimming",
-		WorkDetail:     &workDetail,
-		PointCount:     &pointCount,
-		TreeCount:      &treeCount,
-		ItemCount:      &itemCount,
-		Notes:          &notes,
-		Metadata:       map[string]any{"source": "planning-board", "color": "red"},
+		AssignedTeamID:  participantTeamID,
+		Sequence:        3,
+		PointLabel:      "P3",
+		Latitude:        &lat,
+		Longitude:       &lng,
+		WorkType:        "tree_trimming",
+		WorkDetail:      &workDetail,
+		PointCount:      &pointCount,
+		TreeCount:       &treeCount,
+		ItemCount:       &itemCount,
+		Notes:           &notes,
+		BeforePhotoURLs: beforePhotoURLs,
+		Metadata:        map[string]any{"source": "planning-board", "color": "red"},
 	}}})
 	if err != nil {
 		t.Fatalf("replace tasks error: %v", err)
@@ -449,12 +459,34 @@ func TestReplaceTasksAllowsTeamLeadForParticipatingTeamsAndPreservesPlanningBoar
 	if got.Latitude == nil || *got.Latitude != lat || got.Longitude == nil || *got.Longitude != lng || got.PointCount == nil || *got.PointCount != pointCount || got.TreeCount == nil || *got.TreeCount != treeCount || got.ItemCount == nil || *got.ItemCount != itemCount || got.Notes == nil || *got.Notes != notes {
 		t.Fatalf("planning board task fields not preserved: %#v", got)
 	}
+	if !reflect.DeepEqual(got.BeforePhotoURLs, beforePhotoURLs) {
+		t.Fatalf("before photos not preserved: %#v", got.BeforePhotoURLs)
+	}
 	if got.Metadata["source"] != "planning-board" || got.Metadata["color"] != "red" || got.Status != entity.LargeWorkTaskStatusTodo {
 		t.Fatalf("metadata/status not preserved/defaulted: %#v", got)
 	}
 
+	_, err = svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{
+		AssignedTeamID:  participantTeamID,
+		Latitude:        &lat,
+		Longitude:       &lng,
+		WorkDetail:      &workDetail,
+		BeforePhotoURLs: []string{" https://cdn.example/before-site.jpg ", "", "\t"},
+		Metadata:        map[string]any{"locationText": "near front gate"},
+	}}})
+	if err != nil {
+		t.Fatalf("lat/long + detail only should be accepted: %v", err)
+	}
+	got = repo.capturedReplaceWithParticipants.Tasks[0]
+	if got.PointLabel != "13.756331, 100.501762" || got.WorkType != "location_note" {
+		t.Fatalf("defaulted task identity = %#v", got)
+	}
+	if !reflect.DeepEqual(got.BeforePhotoURLs, []string{"https://cdn.example/before-site.jpg"}) {
+		t.Fatalf("before photos not cleaned: %#v", got.BeforePhotoURLs)
+	}
+
 	otherTeamID := int64(10)
-	_, err = NewService(&fakeRepository{getItem: plan}).ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &otherTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{AssignedTeamID: participantTeamID, Sequence: 1, PointLabel: "P1", WorkType: "tree"}}})
+	_, err = NewService(&fakeRepository{getItem: plan}).ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &otherTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{validTaskInput(participantTeamID, "P1")}})
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("other team lead replace got %v, want ErrForbidden", err)
 	}
@@ -467,12 +499,48 @@ func TestReplaceTasksRejectsUnassignedTaskTeams(t *testing.T) {
 	repo := &fakeRepository{getItem: plan}
 	svc := NewService(repo)
 
-	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{AssignedTeamID: unassignedTeamID, Sequence: 1, PointLabel: "P1", WorkType: "tree"}}})
+	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{validTaskInput(unassignedTeamID, "P1")}})
 	if !errors.Is(err, ErrInvalidTask) {
 		t.Fatalf("unassigned task team got %v, want ErrInvalidTask", err)
 	}
 	if repo.capturedReplaceWithParticipants.LargeWorkItemID != 0 {
 		t.Fatalf("replace mutated repository despite unassigned task team: %#v", repo.capturedReplaceWithParticipants)
+	}
+}
+
+func TestReplaceTasksRejectsLiteTasksMissingRequiredFields(t *testing.T) {
+	ownerTeamID := int64(7)
+	participantTeamID := int64(8)
+	plan := &entity.LargeWorkItem{ID: 501, OwnerTeamID: ownerTeamID, Status: entity.LargeWorkStatusPlanned, Teams: []entity.LargeWorkTeam{{ID: ownerTeamID}, {ID: participantTeamID}}}
+	lat := 13.756331
+	lng := 100.501762
+	detail := "รายละเอียดหน้างาน"
+	blankDetail := "   "
+
+	cases := []struct {
+		name string
+		task TaskPointInput
+	}{
+		{name: "missing team", task: TaskPointInput{Latitude: &lat, Longitude: &lng, WorkDetail: &detail}},
+		{name: "missing latitude", task: TaskPointInput{AssignedTeamID: participantTeamID, Longitude: &lng, WorkDetail: &detail}},
+		{name: "missing longitude", task: TaskPointInput{AssignedTeamID: participantTeamID, Latitude: &lat, WorkDetail: &detail}},
+		{name: "missing detail", task: TaskPointInput{AssignedTeamID: participantTeamID, Latitude: &lat, Longitude: &lng}},
+		{name: "blank detail", task: TaskPointInput{AssignedTeamID: participantTeamID, Latitude: &lat, Longitude: &lng, WorkDetail: &blankDetail}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &fakeRepository{getItem: plan}
+			svc := NewService(repo)
+
+			_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{tc.task}})
+			if !errors.Is(err, ErrInvalidTask) {
+				t.Fatalf("replace tasks got %v, want ErrInvalidTask", err)
+			}
+			if repo.capturedReplaceWithParticipants.LargeWorkItemID != 0 {
+				t.Fatalf("replace mutated repository despite invalid lite task: %#v", repo.capturedReplaceWithParticipants)
+			}
+		})
 	}
 }
 
@@ -485,7 +553,7 @@ func TestReplaceTasksRejectsInactiveParentPlanBeforeMutating(t *testing.T) {
 			repo := &fakeRepository{getItem: plan}
 			svc := NewService(repo)
 
-			_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{AssignedTeamID: participantTeamID, PointLabel: "P1", WorkType: "tree"}}})
+			_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{validTaskInput(participantTeamID, "P1")}})
 			if !errors.Is(err, ErrInvalidStateTransition) {
 				t.Fatalf("replace tasks on %s parent got %v, want ErrInvalidStateTransition", status, err)
 			}
@@ -503,12 +571,12 @@ func TestReplaceTasksDefaultsSequencePerAssignedTeam(t *testing.T) {
 	repo := &fakeRepository{getItem: plan, replaceWithParticipantsTasks: []entity.LargeWorkTask{{ID: 11, LargeWorkItemID: 501, AssignedTeamID: ownerTeamID}}}
 	svc := NewService(repo)
 
-	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{
-		{AssignedTeamID: ownerTeamID, PointLabel: "Owner P1", WorkType: "tree"},
-		{AssignedTeamID: participantTeamID, PointLabel: "Participant P1", WorkType: "tree"},
-		{AssignedTeamID: ownerTeamID, PointLabel: "Owner P2", WorkType: "tree"},
-		{AssignedTeamID: participantTeamID, Sequence: 9, PointLabel: "Participant P9", WorkType: "tree"},
-	}})
+	ownerP1 := validTaskInput(ownerTeamID, "Owner P1")
+	participantP1 := validTaskInput(participantTeamID, "Participant P1")
+	ownerP2 := validTaskInput(ownerTeamID, "Owner P2")
+	participantP9 := validTaskInput(participantTeamID, "Participant P9")
+	participantP9.Sequence = 9
+	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{ownerP1, participantP1, ownerP2, participantP9}})
 	if err != nil {
 		t.Fatalf("replace tasks error: %v", err)
 	}
@@ -584,7 +652,7 @@ func TestReplaceTasksReturnsClearSchemaUnavailableError(t *testing.T) {
 	repo := &fakeRepository{getItem: plan, listTasksErr: repo.ErrSchemaUnavailable}
 	svc := NewService(repo)
 
-	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{AssignedTeamID: 8, Sequence: 1, PointLabel: "P1", WorkType: "tree"}}})
+	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{validTaskInput(8, "P1")}})
 	if !errors.Is(err, ErrTaskSchemaUnavailable) {
 		t.Fatalf("schema unavailable got %v, want ErrTaskSchemaUnavailable", err)
 	}
@@ -596,7 +664,7 @@ func TestReplaceTasksRejectsExecutedTasksBeforeMutatingParticipants(t *testing.T
 	repo := &fakeRepository{getItem: plan, listTasks: []entity.LargeWorkTask{{ID: 1, LargeWorkItemID: 501, AssignedTeamID: 8, Status: entity.LargeWorkTaskStatusInProgress}}}
 	svc := NewService(repo)
 
-	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{AssignedTeamID: 8, Sequence: 1, PointLabel: "P1", WorkType: "tree"}}})
+	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{validTaskInput(8, "P1")}})
 	if !errors.Is(err, ErrInvalidStateTransition) {
 		t.Fatalf("replace with executed tasks got %v, want ErrInvalidStateTransition", err)
 	}

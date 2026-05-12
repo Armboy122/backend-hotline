@@ -86,18 +86,19 @@ type LargeWorkResponse struct {
 }
 
 type TaskPointRequest struct {
-	AssignedTeamID int64          `json:"assignedTeamId" binding:"required"`
-	Sequence       int            `json:"sequence"`
-	PointLabel     string         `json:"pointLabel" binding:"required"`
-	Latitude       *float64       `json:"latitude"`
-	Longitude      *float64       `json:"longitude"`
-	WorkType       string         `json:"workType" binding:"required"`
-	WorkDetail     *string        `json:"workDetail"`
-	PointCount     *int           `json:"pointCount"`
-	TreeCount      *int           `json:"treeCount"`
-	ItemCount      *int           `json:"itemCount"`
-	Notes          *string        `json:"notes"`
-	Metadata       map[string]any `json:"metadata"`
+	AssignedTeamID  int64          `json:"assignedTeamId" binding:"required"`
+	Sequence        int            `json:"sequence"`
+	PointLabel      string         `json:"pointLabel"`
+	Latitude        *float64       `json:"latitude"`
+	Longitude       *float64       `json:"longitude"`
+	WorkType        string         `json:"workType"`
+	WorkDetail      *string        `json:"workDetail"`
+	PointCount      *int           `json:"pointCount"`
+	TreeCount       *int           `json:"treeCount"`
+	ItemCount       *int           `json:"itemCount"`
+	Notes           *string        `json:"notes"`
+	BeforePhotoURLs []string       `json:"beforePhotoUrls"`
+	Metadata        map[string]any `json:"metadata"`
 }
 
 type ReplaceTasksRequest struct {

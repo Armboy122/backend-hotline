@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -362,7 +363,7 @@ func TestExecutionEndpointsReturnOverviewTasksTodosAndActions(t *testing.T) {
 		want               int
 	}{
 		{http.MethodGet, "/v1/large-work-items/501/overview", "", http.StatusOK},
-		{http.MethodPut, "/v1/large-work-items/501/tasks", `{"tasks":[{"assignedTeamId":8,"sequence":1,"pointLabel":"P1","workType":"tree"}]}`, http.StatusOK},
+		{http.MethodPut, "/v1/large-work-items/501/tasks", `{"tasks":[{"assignedTeamId":8,"sequence":1,"latitude":13.756331,"longitude":100.501762,"workDetail":"รายละเอียดหน้างาน","beforePhotoUrls":[" https://cdn.example/before-site.jpg ",""]}]}`, http.StatusOK},
 		{http.MethodGet, "/v1/large-work-items/501/tasks", "", http.StatusOK},
 		{http.MethodGet, "/v1/large-work-tasks/my-todos?page=0&limit=200", "", http.StatusOK},
 		{http.MethodPatch, "/v1/large-work-tasks/11/start", "", http.StatusOK},
@@ -383,6 +384,16 @@ func TestExecutionEndpointsReturnOverviewTasksTodosAndActions(t *testing.T) {
 	}
 	if len(svc.lastReplaceTasks.Tasks) != 1 || svc.lastReplaceTasks.Tasks[0].AssignedTeamID != teamID {
 		t.Fatalf("replace tasks input = %#v", svc.lastReplaceTasks)
+	}
+	liteTask := svc.lastReplaceTasks.Tasks[0]
+	if liteTask.PointLabel != "" || liteTask.WorkType != "" {
+		t.Fatalf("lite task should allow service defaults, got pointLabel=%q workType=%q", liteTask.PointLabel, liteTask.WorkType)
+	}
+	if liteTask.Latitude == nil || *liteTask.Latitude != 13.756331 || liteTask.Longitude == nil || *liteTask.Longitude != 100.501762 || liteTask.WorkDetail == nil || *liteTask.WorkDetail != "รายละเอียดหน้างาน" {
+		t.Fatalf("lite task location/detail not forwarded: %#v", liteTask)
+	}
+	if !slices.Equal(liteTask.BeforePhotoURLs, []string{" https://cdn.example/before-site.jpg ", ""}) {
+		t.Fatalf("before photo urls not forwarded for service cleanup: %#v", liteTask.BeforePhotoURLs)
 	}
 	if svc.lastPhotoKind != service.PhotoKindBefore || svc.lastPhotoURL == "" {
 		t.Fatalf("photo capture kind=%q url=%q", svc.lastPhotoKind, svc.lastPhotoURL)

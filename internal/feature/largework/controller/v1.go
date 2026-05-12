@@ -428,7 +428,7 @@ func (c *Controller) ReplaceTasks(ctx *gin.Context) {
 	}
 	input := service.ReplaceTasksInput{Tasks: make([]service.TaskPointInput, 0, len(req.Tasks))}
 	for _, t := range req.Tasks {
-		input.Tasks = append(input.Tasks, service.TaskPointInput{AssignedTeamID: t.AssignedTeamID, Sequence: t.Sequence, PointLabel: t.PointLabel, Latitude: t.Latitude, Longitude: t.Longitude, WorkType: t.WorkType, WorkDetail: t.WorkDetail, PointCount: t.PointCount, TreeCount: t.TreeCount, ItemCount: t.ItemCount, Notes: t.Notes, Metadata: t.Metadata})
+		input.Tasks = append(input.Tasks, service.TaskPointInput{AssignedTeamID: t.AssignedTeamID, Sequence: t.Sequence, PointLabel: t.PointLabel, Latitude: t.Latitude, Longitude: t.Longitude, WorkType: t.WorkType, WorkDetail: t.WorkDetail, PointCount: t.PointCount, TreeCount: t.TreeCount, ItemCount: t.ItemCount, Notes: t.Notes, BeforePhotoURLs: t.BeforePhotoURLs, Metadata: t.Metadata})
 	}
 	tasks, err := c.service.ReplaceTasks(ctx.Request.Context(), actor, id, input)
 	if err != nil {
