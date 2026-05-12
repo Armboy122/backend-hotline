@@ -476,6 +476,54 @@ func TestReplaceTasksRejectsUnassignedTaskTeams(t *testing.T) {
 	}
 }
 
+func TestReplaceTasksRejectsInactiveParentPlanBeforeMutating(t *testing.T) {
+	ownerTeamID := int64(7)
+	participantTeamID := int64(8)
+	for _, status := range []string{entity.LargeWorkStatusCompleted, entity.LargeWorkStatusCancelled} {
+		t.Run(status, func(t *testing.T) {
+			plan := &entity.LargeWorkItem{ID: 501, OwnerTeamID: ownerTeamID, Status: status, Teams: []entity.LargeWorkTeam{{ID: ownerTeamID}, {ID: participantTeamID}}}
+			repo := &fakeRepository{getItem: plan}
+			svc := NewService(repo)
+
+			_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{{AssignedTeamID: participantTeamID, PointLabel: "P1", WorkType: "tree"}}})
+			if !errors.Is(err, ErrInvalidStateTransition) {
+				t.Fatalf("replace tasks on %s parent got %v, want ErrInvalidStateTransition", status, err)
+			}
+			if repo.capturedListTasks.LargeWorkItemID != 0 || repo.capturedReplaceWithParticipants.LargeWorkItemID != 0 {
+				t.Fatalf("repository mutated/queried tasks despite inactive parent: list=%#v replace=%#v", repo.capturedListTasks, repo.capturedReplaceWithParticipants)
+			}
+		})
+	}
+}
+
+func TestReplaceTasksDefaultsSequencePerAssignedTeam(t *testing.T) {
+	ownerTeamID := int64(7)
+	participantTeamID := int64(8)
+	plan := &entity.LargeWorkItem{ID: 501, OwnerTeamID: ownerTeamID, Status: entity.LargeWorkStatusPlanned, Teams: []entity.LargeWorkTeam{{ID: ownerTeamID}, {ID: participantTeamID}}}
+	repo := &fakeRepository{getItem: plan, replaceWithParticipantsTasks: []entity.LargeWorkTask{{ID: 11, LargeWorkItemID: 501, AssignedTeamID: ownerTeamID}}}
+	svc := NewService(repo)
+
+	_, err := svc.ReplaceTasks(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 501, ReplaceTasksInput{Tasks: []TaskPointInput{
+		{AssignedTeamID: ownerTeamID, PointLabel: "Owner P1", WorkType: "tree"},
+		{AssignedTeamID: participantTeamID, PointLabel: "Participant P1", WorkType: "tree"},
+		{AssignedTeamID: ownerTeamID, PointLabel: "Owner P2", WorkType: "tree"},
+		{AssignedTeamID: participantTeamID, Sequence: 9, PointLabel: "Participant P9", WorkType: "tree"},
+	}})
+	if err != nil {
+		t.Fatalf("replace tasks error: %v", err)
+	}
+	got := repo.capturedReplaceWithParticipants.Tasks
+	if len(got) != 4 {
+		t.Fatalf("captured tasks len = %d, want 4", len(got))
+	}
+	wantSequences := []int{1, 1, 2, 9}
+	for i, want := range wantSequences {
+		if got[i].Sequence != want {
+			t.Fatalf("task %d sequence = %d, want %d; all tasks=%#v", i, got[i].Sequence, want, got)
+		}
+	}
+}
+
 func TestMyTodosStartPhotoCompleteAndBlockEnforceOwnTeamAndPhotos(t *testing.T) {
 	teamID := int64(8)
 	workerActor := actor(policy.RoleUser, &teamID)

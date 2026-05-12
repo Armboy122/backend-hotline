@@ -366,9 +366,9 @@ func (LargeWorkItemTeam) TableName() string {
 // LargeWorkTask stores per-point execution work assigned to a team under a large work plan.
 type LargeWorkTask struct {
 	ID                int64            `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
-	LargeWorkItemID   int64            `gorm:"not null;column:large_work_item_id;index:idx_large_work_tasks_plan_sequence,priority:1" json:"largeWorkItemId"`
-	AssignedTeamID    int64            `gorm:"not null;column:assigned_team_id;index:idx_large_work_tasks_assigned_team_status,priority:1" json:"assignedTeamId"`
-	Sequence          int              `gorm:"not null;column:sequence;index:idx_large_work_tasks_plan_sequence,priority:2" json:"sequence"`
+	LargeWorkItemID   int64            `gorm:"not null;column:large_work_item_id;uniqueIndex:idx_large_work_tasks_plan_team_sequence,priority:1" json:"largeWorkItemId"`
+	AssignedTeamID    int64            `gorm:"not null;column:assigned_team_id;uniqueIndex:idx_large_work_tasks_plan_team_sequence,priority:2;index:idx_large_work_tasks_assigned_team_status,priority:1" json:"assignedTeamId"`
+	Sequence          int              `gorm:"not null;column:sequence;uniqueIndex:idx_large_work_tasks_plan_team_sequence,priority:3" json:"sequence"`
 	PointLabel        string           `gorm:"not null;column:point_label" json:"pointLabel"`
 	Latitude          *decimal.Decimal `gorm:"type:decimal(9,6);column:latitude" json:"latitude,omitempty"`
 	Longitude         *decimal.Decimal `gorm:"type:decimal(9,6);column:longitude" json:"longitude,omitempty"`

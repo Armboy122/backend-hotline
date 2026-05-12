@@ -434,6 +434,9 @@ func (s *service) ReplaceTasks(ctx context.Context, actor entity.Actor, planID i
 	if item == nil {
 		return nil, ErrNotFound
 	}
+	if !isEditableStatus(item.Status) {
+		return nil, ErrInvalidStateTransition
+	}
 	if !actor.CanAssignLargeWorkTasks(item, 0) {
 		return nil, ErrForbidden
 	}
@@ -449,7 +452,8 @@ func (s *service) ReplaceTasks(ctx context.Context, actor entity.Actor, planID i
 		}
 	}
 	tasks := make([]repo.TaskInput, 0, len(input.Tasks))
-	for i, t := range input.Tasks {
+	nextSequenceByTeam := map[int64]int{}
+	for _, t := range input.Tasks {
 		if t.AssignedTeamID <= 0 || t.PointLabel == "" || t.WorkType == "" {
 			return nil, ErrInvalidTask
 		}
@@ -458,8 +462,9 @@ func (s *service) ReplaceTasks(ctx context.Context, actor entity.Actor, planID i
 		}
 		seq := t.Sequence
 		if seq <= 0 {
-			seq = i + 1
+			seq = nextSequenceByTeam[t.AssignedTeamID] + 1
 		}
+		nextSequenceByTeam[t.AssignedTeamID] = seq
 		tasks = append(tasks, repo.TaskInput{AssignedTeamID: t.AssignedTeamID, Sequence: seq, PointLabel: t.PointLabel, Latitude: t.Latitude, Longitude: t.Longitude, WorkType: t.WorkType, WorkDetail: t.WorkDetail, PointCount: t.PointCount, TreeCount: t.TreeCount, ItemCount: t.ItemCount, Notes: t.Notes, Status: entity.LargeWorkTaskStatusTodo, Metadata: t.Metadata})
 	}
 	existingTasks, err := s.repo.ListTasksByPlan(ctx, repo.ListTasksQuery{LargeWorkItemID: planID})

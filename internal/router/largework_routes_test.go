@@ -25,6 +25,7 @@ func TestLargeWorkRoutesAreRegistered(t *testing.T) {
 		http.MethodPost + " /v1/large-work-items/:id/cancel",
 		http.MethodPost + " /v1/large-work-items/:id/attachments",
 		http.MethodGet + " /v1/large-work-items/:id/overview",
+		http.MethodPut + " /v1/large-work-items/:id/tasks",
 		http.MethodPost + " /v1/large-work-items/:id/tasks",
 		http.MethodGet + " /v1/large-work-items/:id/tasks",
 		http.MethodGet + " /v1/large-work-tasks/my-todos",

@@ -286,6 +286,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			largeWorksV1.GET("/:id", middleware.CachePrivate(), lwCtrl.GetByID)
 			largeWorksV1.GET("/:id/overview", middleware.CachePrivate(), lwCtrl.GetOverview)
 			largeWorksV1.GET("/:id/tasks", middleware.CachePrivate(), lwCtrl.ListTasks)
+			largeWorksV1.PUT("/:id/tasks", lwCtrl.ReplaceTasks)
 			largeWorksV1.POST("/:id/tasks", lwCtrl.ReplaceTasks)
 			largeWorksTasksV1 := apiV1.Group("/large-work-tasks")
 			largeWorksTasksV1.Use(authMw.RequireAuth())

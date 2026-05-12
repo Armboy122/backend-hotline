@@ -349,7 +349,7 @@ func TestExecutionEndpointsReturnOverviewTasksTodosAndActions(t *testing.T) {
 		ctx.Next()
 	})
 	r.GET("/v1/large-work-items/:id/overview", c.GetOverview)
-	r.POST("/v1/large-work-items/:id/tasks", c.ReplaceTasks)
+	r.PUT("/v1/large-work-items/:id/tasks", c.ReplaceTasks)
 	r.GET("/v1/large-work-items/:id/tasks", c.ListTasks)
 	r.GET("/v1/large-work-tasks/my-todos", c.MyTodos)
 	r.PATCH("/v1/large-work-tasks/:taskId/start", c.StartTask)
@@ -362,7 +362,7 @@ func TestExecutionEndpointsReturnOverviewTasksTodosAndActions(t *testing.T) {
 		want               int
 	}{
 		{http.MethodGet, "/v1/large-work-items/501/overview", "", http.StatusOK},
-		{http.MethodPost, "/v1/large-work-items/501/tasks", `{"tasks":[{"assignedTeamId":8,"sequence":1,"pointLabel":"P1","workType":"tree"}]}`, http.StatusOK},
+		{http.MethodPut, "/v1/large-work-items/501/tasks", `{"tasks":[{"assignedTeamId":8,"sequence":1,"pointLabel":"P1","workType":"tree"}]}`, http.StatusOK},
 		{http.MethodGet, "/v1/large-work-items/501/tasks", "", http.StatusOK},
 		{http.MethodGet, "/v1/large-work-tasks/my-todos?page=0&limit=200", "", http.StatusOK},
 		{http.MethodPatch, "/v1/large-work-tasks/11/start", "", http.StatusOK},
@@ -407,7 +407,7 @@ func TestExecutionEndpointsMapValidationAndForbiddenErrors(t *testing.T) {
 		ctx.Next()
 	})
 	r.PATCH("/v1/large-work-tasks/:taskId/complete", c.CompleteTask)
-	r.POST("/v1/large-work-items/:id/tasks", c.ReplaceTasks)
+	r.PUT("/v1/large-work-items/:id/tasks", c.ReplaceTasks)
 
 	req := httptest.NewRequest(http.MethodPatch, "/v1/large-work-tasks/11/complete", strings.NewReader(`{"completionNote":"done"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -417,7 +417,7 @@ func TestExecutionEndpointsMapValidationAndForbiddenErrors(t *testing.T) {
 		t.Fatalf("complete status=%d want 400 body=%s", rec.Code, rec.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/v1/large-work-items/501/tasks", strings.NewReader(`{"tasks":[{"assignedTeamId":8,"pointLabel":"P1","workType":"tree"}]}`))
+	req = httptest.NewRequest(http.MethodPut, "/v1/large-work-items/501/tasks", strings.NewReader(`{"tasks":[{"assignedTeamId":8,"pointLabel":"P1","workType":"tree"}]}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
