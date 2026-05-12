@@ -543,8 +543,8 @@ func taskInputToModel(largeWorkItemID int64, input TaskInput, now time.Time) (mo
 		ItemCount:         input.ItemCount,
 		Notes:             input.Notes,
 		Status:            status,
-		BeforePhotoURLs:   models.StringArray(input.BeforePhotoURLs),
-		AfterPhotoURLs:    models.StringArray(input.AfterPhotoURLs),
+		BeforePhotoURLs:   stringArrayOrEmpty(input.BeforePhotoURLs),
+		AfterPhotoURLs:    stringArrayOrEmpty(input.AfterPhotoURLs),
 		CompletionNote:    input.CompletionNote,
 		StartedByUserID:   input.StartedByUserID,
 		StartedAt:         input.StartedAt,
@@ -554,6 +554,13 @@ func taskInputToModel(largeWorkItemID int64, input TaskInput, now time.Time) (mo
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}, nil
+}
+
+func stringArrayOrEmpty(values []string) models.StringArray {
+	if values == nil {
+		return models.StringArray{}
+	}
+	return models.StringArray(values)
 }
 
 func floatPtrToDecimal(value *float64) *decimal.Decimal {

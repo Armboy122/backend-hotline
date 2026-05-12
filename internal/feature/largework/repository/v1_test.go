@@ -119,4 +119,28 @@ func TestTaskInputToModelDefaultsMetadataObject(t *testing.T) {
 	}
 }
 
+func TestTaskInputToModelDefaultsPhotoArraysToEmptyPostgresArrays(t *testing.T) {
+	row, err := taskInputToModel(501, TaskInput{AssignedTeamID: 12, Sequence: 1, PointLabel: "P1", WorkType: "tree", Status: largeworkentity.LargeWorkTaskStatusTodo}, time.Date(2026, 5, 11, 8, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("taskInputToModel error: %v", err)
+	}
+	if row.BeforePhotoURLs == nil {
+		t.Fatal("before_photo_urls should default to an empty array, not NULL")
+	}
+	if row.AfterPhotoURLs == nil {
+		t.Fatal("after_photo_urls should default to an empty array, not NULL")
+	}
+	beforeValue, err := row.BeforePhotoURLs.Value()
+	if err != nil {
+		t.Fatalf("before_photo_urls value error: %v", err)
+	}
+	afterValue, err := row.AfterPhotoURLs.Value()
+	if err != nil {
+		t.Fatalf("after_photo_urls value error: %v", err)
+	}
+	if beforeValue != "{}" || afterValue != "{}" {
+		t.Fatalf("photo array DB values = before:%#v after:%#v, want both {}", beforeValue, afterValue)
+	}
+}
+
 func decimalPtr(v decimal.Decimal) *decimal.Decimal { return &v }
