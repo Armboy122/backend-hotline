@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"backend-hotlines3/internal/feature/auth/policy"
 	"backend-hotlines3/internal/feature/teamplan/entity"
 	"backend-hotlines3/internal/feature/teamplan/repository"
 )
@@ -70,7 +71,7 @@ func NewService(repo repository.Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) List(ctx context.Context, _ entity.Actor, input ListInput) (*ListOutput, error) {
+func (s *Service) List(ctx context.Context, actor entity.Actor, input ListInput) (*ListOutput, error) {
 	if input.From.IsZero() || input.To.IsZero() {
 		return nil, entity.ErrInvalidRange
 	}
@@ -79,12 +80,16 @@ func (s *Service) List(ctx context.Context, _ entity.Actor, input ListInput) (*L
 	if to.Before(from) {
 		return nil, entity.ErrInvalidRange
 	}
+	teamID, err := scopedListTeamID(actor, input.TeamID)
+	if err != nil {
+		return nil, err
+	}
 	page := normalizePage(input.Page)
 	limit := normalizeLimit(input.Limit)
 	items, total, err := s.repo.List(ctx, repository.ListQuery{
 		From:   from,
 		To:     to,
-		TeamID: input.TeamID,
+		TeamID: teamID,
 		Status: input.Status,
 		Page:   page,
 		Limit:  limit,
@@ -95,7 +100,7 @@ func (s *Service) List(ctx context.Context, _ entity.Actor, input ListInput) (*L
 	return &ListOutput{Items: items, Total: total, Page: page, Limit: limit}, nil
 }
 
-func (s *Service) GetByID(ctx context.Context, _ entity.Actor, id int64) (*entity.TeamPlan, error) {
+func (s *Service) GetByID(ctx context.Context, actor entity.Actor, id int64) (*entity.TeamPlan, error) {
 	if id <= 0 {
 		return nil, entity.ErrInvalidID
 	}
@@ -105,6 +110,9 @@ func (s *Service) GetByID(ctx context.Context, _ entity.Actor, id int64) (*entit
 	}
 	if item == nil {
 		return nil, entity.ErrNotFound
+	}
+	if !canViewTeamPlan(actor, *item) {
+		return nil, entity.ErrForbidden
 	}
 	return item, nil
 }
@@ -215,6 +223,35 @@ func (s *Service) Delete(ctx context.Context, actor entity.Actor, id int64) erro
 		return entity.ErrForbidden
 	}
 	return s.repo.SoftDelete(ctx, repository.DeleteCommand{ID: id})
+}
+
+func canViewTeamPlan(actor entity.Actor, plan entity.TeamPlan) bool {
+	switch actor.Role {
+	case policy.RoleSuperAdmin, policy.RoleAdmin:
+		return true
+	case policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
+		return actor.TeamID != nil && *actor.TeamID == plan.TeamID
+	default:
+		return false
+	}
+}
+
+func scopedListTeamID(actor entity.Actor, requested *int64) (*int64, error) {
+	switch actor.Role {
+	case policy.RoleSuperAdmin, policy.RoleAdmin:
+		return requested, nil
+	case policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
+		if actor.TeamID == nil || *actor.TeamID <= 0 {
+			return nil, entity.ErrForbidden
+		}
+		if requested != nil && *requested != *actor.TeamID {
+			return nil, entity.ErrForbidden
+		}
+		teamID := *actor.TeamID
+		return &teamID, nil
+	default:
+		return nil, entity.ErrForbidden
+	}
 }
 
 func normalizePage(page int) int {

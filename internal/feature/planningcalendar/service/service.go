@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"backend-hotlines3/internal/feature/auth/policy"
 	largeworkentity "backend-hotlines3/internal/feature/largework/entity"
 	largeworkrepository "backend-hotlines3/internal/feature/largework/repository"
 	monthlyentity "backend-hotlines3/internal/feature/monthlyplan/entity"
@@ -117,7 +118,8 @@ func (s *Service) GetMonth(ctx context.Context, actor Actor, year, month int) (*
 	monthStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	monthEnd := monthStart.AddDate(0, 1, -1)
 
-	teamPlans, err := s.teamPlans.ListAll(ctx, teamplanrepository.ListQuery{From: monthStart, To: monthEnd})
+	teamPlanTeamID := scopedTeamPlanCalendarTeamID(actor)
+	teamPlans, err := s.teamPlans.ListAll(ctx, teamplanrepository.ListQuery{From: monthStart, To: monthEnd, TeamID: teamPlanTeamID})
 	if err != nil {
 		return nil, err
 	}
@@ -206,6 +208,20 @@ func (s *Service) GetMonth(ctx context.Context, actor Actor, year, month int) (*
 		MonthEnd:   monthEnd.Format(dateLayout),
 		Days:       days,
 	}, nil
+}
+
+func scopedTeamPlanCalendarTeamID(actor Actor) *int64 {
+	switch actor.Role {
+	case policy.RoleSuperAdmin, policy.RoleAdmin:
+		return nil
+	case policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
+		if actor.TeamID != nil && *actor.TeamID > 0 {
+			teamID := *actor.TeamID
+			return &teamID
+		}
+	}
+	noTeamID := int64(-1)
+	return &noTeamID
 }
 
 func buildTeamPlanItem(actor teamplanentity.Actor, plan teamplanentity.TeamPlan) CalendarItem {

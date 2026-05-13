@@ -65,6 +65,47 @@ func TestServiceCreateEnforcesRoleAndTeamScope(t *testing.T) {
 	}
 }
 
+func TestServiceListScopesTeamActorsToTheirOwnTeam(t *testing.T) {
+	ctx := context.Background()
+	teamID := int64(7)
+	otherTeamID := int64(8)
+	actor := entity.Actor{UserID: 3, Role: policy.RoleUser, TeamID: &teamID}
+	from := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
+
+	repo := &fakeRepo{}
+	svc := NewService(repo)
+	if _, err := svc.List(ctx, actor, ListInput{From: from, To: to}); err != nil {
+		t.Fatalf("list own team scoped implicitly: %v", err)
+	}
+	if repo.listInput.TeamID == nil || *repo.listInput.TeamID != teamID {
+		t.Fatalf("list should constrain user actor to own team, got query %+v", repo.listInput)
+	}
+
+	repo = &fakeRepo{}
+	svc = NewService(repo)
+	if _, err := svc.List(ctx, actor, ListInput{From: from, To: to, TeamID: &otherTeamID}); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("cross-team list expected forbidden, got %v", err)
+	}
+	if repo.listCalled {
+		t.Fatalf("repository should not be called on forbidden cross-team list")
+	}
+}
+
+func TestServiceGetByIDRejectsCrossTeamAccess(t *testing.T) {
+	ctx := context.Background()
+	teamID := int64(7)
+	otherTeamID := int64(8)
+	actor := entity.Actor{UserID: 3, Role: policy.RoleUser, TeamID: &teamID}
+	otherTeamPlan := entity.TeamPlan{ID: 12, TeamID: otherTeamID, CreatedByUserID: 92, Status: entity.StatusPlanned}
+
+	repo := &fakeRepo{getByIDResult: &otherTeamPlan}
+	svc := NewService(repo)
+	if _, err := svc.GetByID(ctx, actor, otherTeamPlan.ID); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("cross-team get expected forbidden, got %v", err)
+	}
+}
+
 func TestServiceUpdateRejectsStartOnlyDateAfterExistingEndDate(t *testing.T) {
 	ctx := context.Background()
 	teamID := int64(7)
@@ -196,16 +237,20 @@ func TestServiceUpdateAndDeleteEnforceOwnershipRules(t *testing.T) {
 }
 
 type fakeRepo struct {
+	listCalled    bool
 	createCalled  bool
 	updateCalled  bool
 	deleteCalled  bool
+	listInput     repository.ListQuery
 	createInput   *repository.CreateInput
 	updateInput   *repository.UpdateInput
 	deleteInput   *repository.DeleteCommand
 	getByIDResult *entity.TeamPlan
 }
 
-func (f *fakeRepo) List(context.Context, repository.ListQuery) ([]entity.TeamPlan, int64, error) {
+func (f *fakeRepo) List(_ context.Context, query repository.ListQuery) ([]entity.TeamPlan, int64, error) {
+	f.listCalled = true
+	f.listInput = query
 	return nil, 0, nil
 }
 

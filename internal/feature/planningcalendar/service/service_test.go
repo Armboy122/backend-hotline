@@ -186,6 +186,9 @@ func TestGetMonthBuildsCalendarFromTeamAndMonthlyPlans(t *testing.T) {
 	if teamRepo.calls != 1 {
 		t.Fatalf("expected one team plan query, got %d", teamRepo.calls)
 	}
+	if teamRepo.lastQuery.TeamID == nil || *teamRepo.lastQuery.TeamID != teamID {
+		t.Fatalf("expected user calendar query to be scoped to own team, got %+v", teamRepo.lastQuery)
+	}
 	if monthlyRepo.periodCalls != 1 || monthlyRepo.fileCalls != 1 || monthlyRepo.settingsCalls != 1 {
 		t.Fatalf("expected one monthly period/files/settings lookup, got period=%d files=%d settings=%d", monthlyRepo.periodCalls, monthlyRepo.fileCalls, monthlyRepo.settingsCalls)
 	}
