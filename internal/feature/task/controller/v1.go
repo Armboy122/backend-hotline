@@ -366,10 +366,16 @@ func (c *controller) ListByFilter(ctx *gin.Context) {
 		return
 	}
 
-	result, err := c.service.ListByFilter(ctx.Request.Context(), actor, taskservice.ListTasksByFilterInput{
+	input := taskservice.ListTasksByFilterInput{
 		Year:  ctx.Query("year"),
 		Month: ctx.Query("month"),
-	})
+	}
+	if teamID := ctx.Query("teamId"); teamID != "" {
+		id, _ := strconv.ParseInt(teamID, 10, 64)
+		input.TeamID = &id
+	}
+
+	result, err := c.service.ListByFilter(ctx.Request.Context(), actor, input)
 	if err != nil {
 		if errors.Is(err, taskservice.ErrYearMonthRequired) {
 			ctx.JSON(http.StatusBadRequest, taskdto.StandardResponse{

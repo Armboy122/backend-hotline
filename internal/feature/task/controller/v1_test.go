@@ -19,12 +19,15 @@ import (
 )
 
 type fakeService struct {
-	capturedActor taskentity.Actor
-	capturedList  taskservice.ListTasksInput
-	listOutput    *taskservice.ListTasksOutput
-	listErr       error
-	createResult  *taskentity.Task
-	createErr     error
+	capturedActor      taskentity.Actor
+	capturedList       taskservice.ListTasksInput
+	capturedByFilter   taskservice.ListTasksByFilterInput
+	listOutput         *taskservice.ListTasksOutput
+	listErr            error
+	listByFilterOutput *taskservice.ListTasksByFilterOutput
+	listByFilterErr    error
+	createResult       *taskentity.Task
+	createErr          error
 }
 
 func (f *fakeService) List(_ context.Context, actor taskentity.Actor, input taskservice.ListTasksInput) (*taskservice.ListTasksOutput, error) {
@@ -45,8 +48,9 @@ func (f *fakeService) Delete(context.Context, taskentity.Actor, int64) error { r
 func (f *fakeService) ListByTeam(context.Context, taskentity.Actor, taskservice.ListTasksByTeamInput) (*taskservice.ListTasksByTeamOutput, error) {
 	return nil, nil
 }
-func (f *fakeService) ListByFilter(context.Context, taskentity.Actor, taskservice.ListTasksByFilterInput) (*taskservice.ListTasksByFilterOutput, error) {
-	return nil, nil
+func (f *fakeService) ListByFilter(_ context.Context, _ taskentity.Actor, input taskservice.ListTasksByFilterInput) (*taskservice.ListTasksByFilterOutput, error) {
+	f.capturedByFilter = input
+	return f.listByFilterOutput, f.listByFilterErr
 }
 
 func TestListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
@@ -207,6 +211,34 @@ func TestCreateMapsForbiddenToForbiddenResponse(t *testing.T) {
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+func TestListByFilterPassesTeamIDQueryToService(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	service := &fakeService{listByFilterOutput: &taskservice.ListTasksByFilterOutput{}}
+	c := &controller{service: service}
+	r := gin.New()
+	r.Use(func(ctx *gin.Context) {
+		ctx.Set("user_id", uint(1))
+		ctx.Set("role", "super_admin")
+		ctx.Next()
+	})
+	r.GET("/v1/tasks/by-filter", c.ListByFilter)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/tasks/by-filter?year=2026&month=5&teamId=42", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s, want %d", rec.Code, rec.Body.String(), http.StatusOK)
+	}
+	if service.capturedByFilter.Year != "2026" || service.capturedByFilter.Month != "5" {
+		t.Fatalf("captured year/month = (%q,%q), want (2026,5)", service.capturedByFilter.Year, service.capturedByFilter.Month)
+	}
+	if service.capturedByFilter.TeamID == nil || *service.capturedByFilter.TeamID != 42 {
+		t.Fatalf("captured TeamID = %#v, want 42", service.capturedByFilter.TeamID)
 	}
 }
 
