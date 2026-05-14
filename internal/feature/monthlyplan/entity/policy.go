@@ -15,7 +15,7 @@ func (a Actor) IsAdmin() bool {
 }
 
 func (a Actor) IsTeamSubmitter() bool {
-	return a.Role == policy.RoleTeamLead || a.Role == policy.RoleUser
+	return a.Role == policy.RoleAdmin || a.Role == policy.RoleTeamLead || a.Role == policy.RoleUser
 }
 
 // CanUploadAfterLock checks if actor can bypass the lock.
@@ -33,9 +33,9 @@ func (a Actor) CanUploadMasterPlan() bool {
 }
 
 // CanUploadForTeam checks if actor can upload on behalf of a specific team.
-// Admin/super_admin can upload for any team; team_lead/user can upload only for their own team.
+// Super admin can upload for any team; others are scoped to their own team.
 func (a Actor) CanUploadForTeam(teamID *int64) bool {
-	if a.IsAdmin() {
+	if a.Role == policy.RoleSuperAdmin {
 		return true
 	}
 	if !a.IsTeamSubmitter() || teamID == nil || a.TeamID == nil {
@@ -45,9 +45,9 @@ func (a Actor) CanUploadForTeam(teamID *int64) bool {
 }
 
 // CanAccessFile checks if actor can access a non-master-plan file.
-// Admin can access any; others can only access files from their team.
+// Super admin can access any file; others can only access files from their team.
 func (a Actor) CanAccessFile(fileTeamID *int64) bool {
-	if a.IsAdmin() {
+	if a.Role == policy.RoleSuperAdmin {
 		return true
 	}
 	if a.TeamID == nil || fileTeamID == nil {

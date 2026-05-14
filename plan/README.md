@@ -64,6 +64,7 @@ The previous `internal/modules/<module>` direction is deprecated. Existing modul
 | 30 | [`30-hotline-large-work-push-cleanup-obsidian-note-2026-05-11.md`](./30-hotline-large-work-push-cleanup-obsidian-note-2026-05-11.md) | Obsidian/project note recording pushed commits, cleanup backup path, infographic location, and final board/watchdog status |
 | 31 | [`31-hotline-large-work-team-task-queue-fix-plan-2026-05-11.md`](./31-hotline-large-work-team-task-queue-fix-plan-2026-05-11.md) | Root-cause analysis and fix plan for per-team task queues not loading/assigning after a large-work plan is created |
 | 32 | [`32-hotline-large-work-planning-board-dragdrop-plan-2026-05-11.md`](./32-hotline-large-work-planning-board-dragdrop-plan-2026-05-11.md) | UX/technical plan for a desktop planning board with drag/drop team lanes plus plain-form fallback for `งานระดมทีม` task cards |
+| 34 | [`34-current-status-2026-05-13.md`](./34-current-status-2026-05-13.md) | Current project-local Hotline status across backend, frontend, drained Kanban boards, verification, and next-step options |
 
 ## Phase Progress
 

@@ -3,7 +3,7 @@ package entity
 import "backend-hotlines3/internal/feature/auth/policy"
 
 func (a Actor) IsPrivileged() bool {
-	return a.Role == policy.RoleSuperAdmin || a.Role == policy.RoleAdmin
+	return a.Role == policy.RoleSuperAdmin
 }
 
 func (a Actor) IsTeamLead() bool {
@@ -14,7 +14,10 @@ func (a Actor) CanCreateLargeWork(ownerTeamID *int64) bool {
 	if a.IsPrivileged() {
 		return true
 	}
-	return a.IsTeamLead() && a.TeamID != nil && ownerTeamID != nil && *a.TeamID == *ownerTeamID
+	if a.TeamID == nil || ownerTeamID == nil || *a.TeamID != *ownerTeamID {
+		return false
+	}
+	return a.Role == policy.RoleAdmin || a.Role == policy.RoleTeamLead
 }
 
 func (a Actor) CanUpdateLargeWork(item *LargeWorkItem) bool {
@@ -42,7 +45,10 @@ func (a Actor) canManageEditableLargeWork(item *LargeWorkItem) bool {
 	if a.IsPrivileged() {
 		return true
 	}
-	return a.IsTeamLead() && a.TeamID != nil && *a.TeamID == item.OwnerTeamID
+	if a.TeamID == nil || *a.TeamID != item.OwnerTeamID {
+		return false
+	}
+	return a.Role == policy.RoleAdmin || a.Role == policy.RoleTeamLead
 }
 
 func IsLargeWorkEditableStatus(status string) bool {

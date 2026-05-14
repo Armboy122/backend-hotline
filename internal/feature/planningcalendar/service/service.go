@@ -211,14 +211,12 @@ func (s *Service) GetMonth(ctx context.Context, actor Actor, year, month int) (*
 }
 
 func scopedTeamPlanCalendarTeamID(actor Actor) *int64 {
-	switch actor.Role {
-	case policy.RoleSuperAdmin, policy.RoleAdmin:
+	if actor.Role == policy.RoleSuperAdmin {
 		return nil
-	case policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
-		if actor.TeamID != nil && *actor.TeamID > 0 {
-			teamID := *actor.TeamID
-			return &teamID
-		}
+	}
+	if actor.TeamID != nil && *actor.TeamID > 0 {
+		teamID := *actor.TeamID
+		return &teamID
 	}
 	noTeamID := int64(-1)
 	return &noTeamID

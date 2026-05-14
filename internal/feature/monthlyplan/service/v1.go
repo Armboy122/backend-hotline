@@ -38,7 +38,7 @@ func (s *Service) GetSettings(ctx context.Context) (*mpdomain.SettingsEntity, er
 
 // UpdateSettings patches the monthly plan settings (admin only).
 func (s *Service) UpdateSettings(ctx context.Context, actor mpdomain.Actor, patch SettingsPatch) (*mpdomain.SettingsEntity, error) {
-	if !actor.IsAdmin() {
+	if actor.Role != "super_admin" {
 		return nil, mpdomain.ErrForbiddenAction
 	}
 	settings, err := s.repo.GetOrCreateSettings(ctx)
@@ -138,7 +138,7 @@ func (s *Service) GetYearOverview(ctx context.Context, actor mpdomain.Actor, yea
 	}
 
 	effectiveTeamID := int64(0)
-	if !actor.IsAdmin() {
+	if actor.Role != "super_admin" {
 		if actor.TeamID != nil {
 			effectiveTeamID = *actor.TeamID
 		} else {
@@ -277,7 +277,7 @@ func (s *Service) ConfirmUpload(ctx context.Context, actor mpdomain.Actor, input
 // ListFiles returns plan files for the given period, scoped to the actor's team if non-admin.
 func (s *Service) ListFiles(ctx context.Context, actor mpdomain.Actor, planID int64, teamID int64, search string) ([]mpdomain.PlanFileEntity, error) {
 	effectiveTeamID := teamID
-	if !actor.IsAdmin() {
+	if actor.Role != "super_admin" {
 		if actor.TeamID != nil {
 			effectiveTeamID = *actor.TeamID
 		} else {
@@ -349,7 +349,7 @@ func (s *Service) RestoreFile(ctx context.Context, actor mpdomain.Actor, fileID 
 
 // HardDeleteFile permanently deletes a plan file and its storage object (admin only).
 func (s *Service) HardDeleteFile(ctx context.Context, actor mpdomain.Actor, fileID int64) error {
-	if !actor.IsAdmin() {
+	if actor.Role != "super_admin" {
 		return mpdomain.ErrForbiddenAction
 	}
 	if fileID <= 0 {
@@ -413,6 +413,29 @@ func (s *Service) GetSubmissionStatus(ctx context.Context, actor mpdomain.Actor,
 	})
 	if err := g.Wait(); err != nil {
 		return nil, err
+	}
+	if actor.Role != "super_admin" {
+		if actor.TeamID == nil {
+			teams = nil
+			counts = nil
+		} else {
+			filteredTeams := make([]repository.TeamInfo, 0, 1)
+			for _, team := range teams {
+				if team.ID == *actor.TeamID {
+					filteredTeams = append(filteredTeams, team)
+					break
+				}
+			}
+			teams = filteredTeams
+			filteredCounts := make([]repository.TeamCountRow, 0, 1)
+			for _, count := range counts {
+				if count.TeamID == *actor.TeamID {
+					filteredCounts = append(filteredCounts, count)
+					break
+				}
+			}
+			counts = filteredCounts
+		}
 	}
 	deadline := submissionDeadline(period.Year, period.Month, settings.LockDay)
 	missed := s.clock().After(deadline)

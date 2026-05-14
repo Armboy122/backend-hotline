@@ -20,7 +20,8 @@ func TestLargeWorkActorPermissions(t *testing.T) {
 		canView   bool
 	}{
 		{name: "super admin full access", actor: Actor{Role: policy.RoleSuperAdmin}, itemTeam: &otherTeamID, canCreate: true, canUpdate: true, canCancel: true, canView: true},
-		{name: "admin full access", actor: Actor{Role: policy.RoleAdmin}, itemTeam: &otherTeamID, canCreate: true, canUpdate: true, canCancel: true, canView: true},
+		{name: "admin can manage own team work", actor: Actor{Role: policy.RoleAdmin, TeamID: &ownerTeamID}, itemTeam: &ownerTeamID, canCreate: true, canUpdate: true, canCancel: true, canView: true},
+		{name: "admin cannot manage other team work", actor: Actor{Role: policy.RoleAdmin, TeamID: &ownerTeamID}, itemTeam: &otherTeamID, canCreate: false, canUpdate: false, canCancel: false, canView: false},
 		{name: "team lead can create and manage own team planned work", actor: Actor{UserID: 101, Role: policy.RoleTeamLead, TeamID: &ownerTeamID}, itemTeam: &ownerTeamID, canCreate: true, canUpdate: true, canCancel: true, canView: true},
 		{name: "team lead cannot manage other team", actor: Actor{Role: policy.RoleTeamLead, TeamID: &ownerTeamID}, itemTeam: &otherTeamID, canCreate: false, canUpdate: false, canCancel: false, canView: false},
 		{name: "user can only view own team item", actor: Actor{Role: policy.RoleUser, TeamID: &ownerTeamID}, itemTeam: &ownerTeamID, canCreate: false, canUpdate: false, canCancel: false, canView: true},
@@ -96,9 +97,10 @@ func TestLargeWorkActorTeamLeadCanAssignTasksForOwnPlanOnly(t *testing.T) {
 
 func TestLargeWorkActorManageActionsRequirePrivilegedRoleAndEditableState(t *testing.T) {
 	for _, status := range []string{LargeWorkStatusDraft, LargeWorkStatusPlanned} {
-		t.Run("admin can manage "+status, func(t *testing.T) {
+		t.Run("admin can manage own team "+status, func(t *testing.T) {
 			item := &LargeWorkItem{OwnerTeamID: 7, Status: status}
-			actor := Actor{Role: policy.RoleAdmin}
+			teamID := int64(7)
+			actor := Actor{Role: policy.RoleAdmin, TeamID: &teamID}
 
 			if !actor.CanUpdateLargeWork(item) {
 				t.Fatalf("CanUpdateLargeWork(%s) = false, want true", status)
@@ -110,9 +112,10 @@ func TestLargeWorkActorManageActionsRequirePrivilegedRoleAndEditableState(t *tes
 	}
 
 	for _, status := range []string{LargeWorkStatusInProgress, LargeWorkStatusCompleted, LargeWorkStatusCancelled} {
-		t.Run("admin cannot manage "+status, func(t *testing.T) {
+		t.Run("admin cannot manage own team "+status, func(t *testing.T) {
 			item := &LargeWorkItem{OwnerTeamID: 7, Status: status}
-			actor := Actor{Role: policy.RoleAdmin}
+			teamID := int64(7)
+			actor := Actor{Role: policy.RoleAdmin, TeamID: &teamID}
 
 			if actor.CanUpdateLargeWork(item) {
 				t.Fatalf("CanUpdateLargeWork(%s) = true, want false", status)

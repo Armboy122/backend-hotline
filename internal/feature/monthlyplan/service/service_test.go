@@ -35,7 +35,7 @@ func TestEnsurePeriodRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-func TestUpdateSettingsRequiresAdminAndAppliesPatch(t *testing.T) {
+func TestUpdateSettingsRequiresSuperAdminAndAppliesPatch(t *testing.T) {
 	ctx := context.Background()
 	repo := &fakeRepo{settings: &entity.SettingsEntity{
 		LockDay:                 10,
@@ -47,15 +47,15 @@ func TestUpdateSettingsRequiresAdminAndAppliesPatch(t *testing.T) {
 	}}
 	svc := NewService(repo, &fakeStorage{})
 
-	_, err := svc.UpdateSettings(ctx, entity.Actor{UserID: 1, Role: "team_lead"}, SettingsPatch{})
+	_, err := svc.UpdateSettings(ctx, entity.Actor{UserID: 1, Role: "admin"}, SettingsPatch{})
 	if !errors.Is(err, entity.ErrForbiddenAction) {
-		t.Fatalf("expected forbidden for non-admin, got %v", err)
+		t.Fatalf("expected forbidden for non-super-admin, got %v", err)
 	}
 
 	lockDay := 15
 	maxMB := 25
 	adminAfterLock := false
-	updated, err := svc.UpdateSettings(ctx, entity.Actor{UserID: 2, Role: "admin"}, SettingsPatch{
+	updated, err := svc.UpdateSettings(ctx, entity.Actor{UserID: 2, Role: "super_admin"}, SettingsPatch{
 		LockDay:                 &lockDay,
 		AllowedFileTypes:        []string{"text/csv"},
 		MaxFileSizeMB:           &maxMB,
@@ -256,16 +256,20 @@ func TestGetSubmissionStatusUsesDeterministicDeadlineForNextMonth(t *testing.T) 
 	}
 
 	svc.clock = func() time.Time { return time.Date(2026, 5, 19, 8, 0, 0, 0, time.UTC) }
-	out, err = svc.GetSubmissionStatus(ctx, entity.Actor{UserID: 1, Role: "admin"}, 77)
+	adminTeamID := int64(2)
+	out, err = svc.GetSubmissionStatus(ctx, entity.Actor{UserID: 1, Role: "admin", TeamID: &adminTeamID}, 77)
 	if err != nil {
 		t.Fatalf("get submission status before deadline: %v", err)
 	}
-	if out.Teams[1].Status != "pending" {
-		t.Fatalf("expected team without files to be pending before deadline, got %+v", out.Teams[1])
+	if len(out.Teams) != 1 || out.Teams[0].TeamID != adminTeamID {
+		t.Fatalf("expected admin to see only own team, got %+v", out.Teams)
+	}
+	if out.Teams[0].Status != "pending" {
+		t.Fatalf("expected team without files to be pending before deadline, got %+v", out.Teams[0])
 	}
 }
 
-func TestGetSubmissionStatusAllowsTeamRolesToViewAllTeamRows(t *testing.T) {
+func TestGetSubmissionStatusScopesNonSuperAdminToOwnTeam(t *testing.T) {
 	ctx := context.Background()
 	repo := &fakeRepo{
 		settings:   &entity.SettingsEntity{LockDay: 23},
@@ -280,17 +284,17 @@ func TestGetSubmissionStatusAllowsTeamRolesToViewAllTeamRows(t *testing.T) {
 	svc.clock = func() time.Time { return time.Date(2026, 5, 10, 8, 0, 0, 0, time.UTC) }
 	actorTeamID := int64(7)
 
-	for _, role := range []string{"team_lead", "user"} {
+	for _, role := range []string{"admin", "team_lead", "user"} {
 		t.Run(role, func(t *testing.T) {
 			out, err := svc.GetSubmissionStatus(ctx, entity.Actor{UserID: 40, Role: role, TeamID: &actorTeamID}, 88)
 			if err != nil {
 				t.Fatalf("get submission status: %v", err)
 			}
-			if len(out.Teams) != 2 {
-				t.Fatalf("expected awareness rows for all teams, got %d", len(out.Teams))
+			if len(out.Teams) != 1 {
+				t.Fatalf("expected own team row only, got %d", len(out.Teams))
 			}
-			if out.Teams[0].TeamID != 7 || out.Teams[1].TeamID != 8 {
-				t.Fatalf("expected all team rows in repository order, got %+v", out.Teams)
+			if out.Teams[0].TeamID != actorTeamID {
+				t.Fatalf("expected actor team row, got %+v", out.Teams)
 			}
 		})
 	}

@@ -45,10 +45,18 @@ func TestActorPolicyForTeamPlanActions(t *testing.T) {
 			wantDelete: false,
 		},
 		{
-			name:       "admin cannot create team plan by default",
+			name:       "admin can create and delete own team plan",
 			actor:      Actor{UserID: 4, Role: policy.RoleAdmin, TeamID: &ownTeamID},
 			teamID:     ownTeamID,
 			plan:       TeamPlan{TeamID: ownTeamID, CreatedByUserID: creatorID, Status: StatusPlanned},
+			wantCreate: true,
+			wantDelete: true,
+		},
+		{
+			name:       "admin cannot create or delete another team plan",
+			actor:      Actor{UserID: 4, Role: policy.RoleAdmin, TeamID: &ownTeamID},
+			teamID:     otherTeamID,
+			plan:       TeamPlan{TeamID: otherTeamID, CreatedByUserID: creatorID, Status: StatusPlanned},
 			wantCreate: false,
 			wantDelete: false,
 		},
@@ -104,8 +112,11 @@ func TestActorPolicyForTeamPlanUpdates(t *testing.T) {
 	if !user.CanUpdateTeamPlan(editable) {
 		t.Fatalf("user should update their own planned item")
 	}
-	if admin.CanUpdateTeamPlan(editable) {
-		t.Fatalf("admin should not update team plan by default")
+	if !admin.CanUpdateTeamPlan(editable) {
+		t.Fatalf("admin should update own team plan")
+	}
+	if admin.CanUpdateTeamPlan(otherTeam) {
+		t.Fatalf("admin should not update another team's plan")
 	}
 }
 

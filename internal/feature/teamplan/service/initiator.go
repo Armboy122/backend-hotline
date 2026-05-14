@@ -226,24 +226,29 @@ func (s *Service) Delete(ctx context.Context, actor entity.Actor, id int64) erro
 }
 
 func canViewTeamPlan(actor entity.Actor, plan entity.TeamPlan) bool {
-	switch actor.Role {
-	case policy.RoleSuperAdmin, policy.RoleAdmin:
+	if actor.Role == policy.RoleSuperAdmin {
 		return true
-	case policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
-		return actor.TeamID != nil && *actor.TeamID == plan.TeamID
+	}
+	if actor.TeamID == nil || *actor.TeamID != plan.TeamID {
+		return false
+	}
+	switch actor.Role {
+	case policy.RoleAdmin, policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
+		return true
 	default:
 		return false
 	}
 }
 
 func scopedListTeamID(actor entity.Actor, requested *int64) (*int64, error) {
-	switch actor.Role {
-	case policy.RoleSuperAdmin, policy.RoleAdmin:
+	if actor.Role == policy.RoleSuperAdmin {
 		return requested, nil
-	case policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
-		if actor.TeamID == nil || *actor.TeamID <= 0 {
-			return nil, entity.ErrForbidden
-		}
+	}
+	if actor.TeamID == nil || *actor.TeamID <= 0 {
+		return nil, entity.ErrForbidden
+	}
+	switch actor.Role {
+	case policy.RoleAdmin, policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
 		if requested != nil && *requested != *actor.TeamID {
 			return nil, entity.ErrForbidden
 		}

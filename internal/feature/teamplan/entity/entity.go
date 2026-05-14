@@ -77,10 +77,12 @@ func (a Actor) CanCreateTeamPlan(teamID int64) bool {
 	if teamID <= 0 || a.TeamID == nil {
 		return false
 	}
-	if a.Role != policy.RoleTeamLead && a.Role != policy.RoleUser {
+	switch a.Role {
+	case policy.RoleAdmin, policy.RoleTeamLead, policy.RoleUser:
+		return *a.TeamID == teamID
+	default:
 		return false
 	}
-	return *a.TeamID == teamID
 }
 
 func (a Actor) CanUpdateTeamPlan(plan TeamPlan) bool {
@@ -91,7 +93,7 @@ func (a Actor) CanUpdateTeamPlan(plan TeamPlan) bool {
 		return false
 	}
 	switch a.Role {
-	case policy.RoleTeamLead:
+	case policy.RoleAdmin, policy.RoleTeamLead:
 		return true
 	case policy.RoleUser:
 		return plan.CreatedByUserID == a.UserID && plan.Status == StatusPlanned
@@ -104,10 +106,15 @@ func (a Actor) CanDeleteTeamPlan(plan TeamPlan) bool {
 	if a.Role == policy.RoleSuperAdmin {
 		return true
 	}
-	if a.Role != policy.RoleTeamLead || a.TeamID == nil {
+	if a.TeamID == nil || *a.TeamID != plan.TeamID {
 		return false
 	}
-	return *a.TeamID == plan.TeamID
+	switch a.Role {
+	case policy.RoleAdmin, policy.RoleTeamLead:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p TeamPlan) ExpandedDates() []time.Time {

@@ -210,7 +210,7 @@ func TestListScopesNonPrivilegedActorsToVisibleTeam(t *testing.T) {
 	}
 }
 
-func TestListDoesNotRepaginateRepositoryPageForPrivilegedActors(t *testing.T) {
+func TestListDoesNotRepaginateRepositoryPageForSuperAdmin(t *testing.T) {
 	seed := []entity.LargeWorkItem{
 		{ID: 1, OwnerTeamID: 7},
 		{ID: 2, OwnerTeamID: 8},
@@ -218,22 +218,35 @@ func TestListDoesNotRepaginateRepositoryPageForPrivilegedActors(t *testing.T) {
 		{ID: 4, OwnerTeamID: 10},
 		{ID: 5, OwnerTeamID: 11},
 	}
-	for _, role := range []string{policy.RoleAdmin, policy.RoleSuperAdmin} {
-		t.Run(role, func(t *testing.T) {
-			repo := &fakeRepository{listFunc: paginatedLargeWorkSeed(seed)}
-			svc := NewService(repo)
+	repo := &fakeRepository{listFunc: paginatedLargeWorkSeed(seed)}
+	svc := NewService(repo)
 
-			out, err := svc.List(context.Background(), actor(role, nil), ListInput{Page: 2, Limit: 2})
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if out.Total != 5 {
-				t.Fatalf("total = %d, want repository total 5", out.Total)
-			}
-			if len(out.Items) != 2 || out.Items[0].ID != 3 || out.Items[1].ID != 4 {
-				t.Fatalf("items = %#v, want repository page items 3 and 4", out.Items)
-			}
-		})
+	out, err := svc.List(context.Background(), actor(policy.RoleSuperAdmin, nil), ListInput{Page: 2, Limit: 2})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Total != 5 {
+		t.Fatalf("total = %d, want repository total 5", out.Total)
+	}
+	if len(out.Items) != 2 || out.Items[0].ID != 3 || out.Items[1].ID != 4 {
+		t.Fatalf("items = %#v, want repository page items 3 and 4", out.Items)
+	}
+}
+
+func TestListScopesAdminToOwnTeam(t *testing.T) {
+	teamID := int64(7)
+	repo := &fakeRepository{listItems: []entity.LargeWorkItem{{ID: 1, OwnerTeamID: 7}, {ID: 2, OwnerTeamID: 8}}, listTotal: 1}
+	svc := NewService(repo)
+
+	out, err := svc.List(context.Background(), actor(policy.RoleAdmin, &teamID), ListInput{Page: 1, Limit: 20})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.capturedList.TeamID == nil || *repo.capturedList.TeamID != teamID {
+		t.Fatalf("captured team filter = %#v, want %d", repo.capturedList.TeamID, teamID)
+	}
+	if len(out.Items) != 1 || out.Items[0].ID != 1 {
+		t.Fatalf("items = %#v, want only admin own team item", out.Items)
 	}
 }
 
