@@ -28,6 +28,7 @@ jwt:
 cors:
   allowed_origins:
     - http://localhost:3000
+    - http://127.0.0.1:3000
     - http://localhost:5173
     - https://hotlines3.vercel.app
   allowed_methods:

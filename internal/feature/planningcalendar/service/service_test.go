@@ -233,6 +233,63 @@ func TestGetMonthBuildsCalendarFromTeamAndMonthlyPlans(t *testing.T) {
 	}
 }
 
+func TestGetMonthScopesMonthlyPlanFilesForTeamLead(t *testing.T) {
+	ownTeamID := int64(77)
+	otherTeamID := int64(88)
+	period := &monthlyentity.Entity{ID: 902, Year: 2026, Month: 7, IsLocked: false}
+	workDate := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	ownDesc := "Own team monthly item"
+	otherDesc := "Other team monthly item"
+	loc := "Station scope test"
+
+	monthlyRepo := &fakeMonthlyRepo{
+		period: period,
+		files: []monthlyentity.PlanFileEntity{
+			{
+				ID:            401,
+				MonthlyPlanID: period.ID,
+				TeamID:        &ownTeamID,
+				FileName:      "own.pdf",
+				Description:   &ownDesc,
+				WorkStartDate: &workDate,
+				Destination:   &loc,
+			},
+			{
+				ID:            402,
+				MonthlyPlanID: period.ID,
+				TeamID:        &otherTeamID,
+				FileName:      "other.pdf",
+				Description:   &otherDesc,
+				WorkStartDate: &workDate,
+				Destination:   &loc,
+			},
+		},
+		settings: &monthlyentity.SettingsEntity{ID: 1, LockDay: 28, AdminCanUploadAfterLock: true},
+	}
+	svc := NewService(&fakeTeamPlanRepo{}, monthlyRepo, &fakeLargeWorkRepo{}, func() time.Time {
+		return time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC)
+	})
+	actor := Actor{UserID: 10, Role: "team_lead", TeamID: &ownTeamID}
+
+	result, err := svc.GetMonth(context.Background(), actor, 2026, 7)
+	if err != nil {
+		t.Fatalf("GetMonth returned error: %v", err)
+	}
+	if got := countCalendarItems(result.Days, "2026-07-12", "monthly_plan"); got != 1 {
+		t.Fatalf("team lead calendar should include only own-team monthly plan item, got %d", got)
+	}
+	item := findCalendarItem(result.Days, "2026-07-12", "monthly_plan")
+	if item == nil {
+		t.Fatal("expected monthly plan item on 2026-07-12")
+	}
+	if item.SourceID != 401 {
+		t.Fatalf("monthly item source = %d, want own-team file 401", item.SourceID)
+	}
+	if monthlyRepo.settingsCalls != 1 {
+		t.Fatalf("settings lookups = %d, want 1 for visible files only", monthlyRepo.settingsCalls)
+	}
+}
+
 func TestGetMonthMonthlyPlanCanEditMatchesMonthlyPlanUploadWindow(t *testing.T) {
 	teamID := int64(77)
 	period := &monthlyentity.Entity{ID: 901, Year: 2026, Month: 6, IsLocked: false}
@@ -251,7 +308,7 @@ func TestGetMonthMonthlyPlanCanEditMatchesMonthlyPlanUploadWindow(t *testing.T) 
 		}},
 	}
 	clock := func() time.Time { return time.Date(2026, 5, 24, 9, 0, 0, 0, time.UTC) }
-	actor := Actor{UserID: 10, Role: "admin", TeamID: &teamID}
+	actor := Actor{UserID: 10, Role: "team_lead", TeamID: &teamID}
 
 	monthlySvc := monthlyservice.NewService(repo, nil)
 	monthlySvc.SetClockForTest(clock)

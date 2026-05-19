@@ -1,3 +1,4 @@
+-- +goose Up
 -- Hotline PRD redesign foundation.
 
 -- Final role model removes admin. Existing admin users become team_lead so
@@ -30,3 +31,14 @@ ALTER TABLE "TaskDaily" ADD COLUMN IF NOT EXISTS large_work_task_id BIGINT REFER
 CREATE UNIQUE INDEX IF NOT EXISTS taskdaily_large_work_task_unique_idx
     ON "TaskDaily" (large_work_task_id)
     WHERE large_work_task_id IS NOT NULL AND deletedat IS NULL;
+
+-- +goose Down
+DROP INDEX IF EXISTS taskdaily_large_work_task_unique_idx;
+ALTER TABLE "TaskDaily" DROP COLUMN IF EXISTS large_work_task_id;
+ALTER TABLE "TaskDaily" DROP COLUMN IF EXISTS source_id;
+ALTER TABLE "TaskDaily" DROP COLUMN IF EXISTS source_type;
+
+DROP INDEX IF EXISTS user_capabilities_active_user_code_idx;
+DROP TABLE IF EXISTS user_capabilities;
+
+ALTER TABLE team_plans ALTER COLUMN status SET DEFAULT 'planned';

@@ -51,7 +51,10 @@ func (s *Service) Register(ctx context.Context, req entity.RegisterInput) (entit
 func (s *Service) Login(ctx context.Context, username, pwd string) (entity.LoginResult, error) {
 	authUser, err := s.repo.FindByUsername(ctx, username)
 	if err != nil {
-		return entity.LoginResult{}, entity.ErrInvalidCredentials
+		if errors.Is(err, entity.ErrInvalidCredentials) {
+			return entity.LoginResult{}, entity.ErrInvalidCredentials
+		}
+		return entity.LoginResult{}, err
 	}
 
 	if !password.CheckPassword(pwd, authUser.PasswordHash) {

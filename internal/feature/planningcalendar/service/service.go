@@ -156,6 +156,7 @@ func (s *Service) GetMonth(ctx context.Context, actor Actor, year, month int) (*
 		if err != nil {
 			return nil, err
 		}
+		files = visibleMonthlyPlanFiles(actor, files)
 		if len(files) > 0 {
 			settings, err := s.monthlyPlans.GetOrCreateSettings(ctx)
 			if err != nil {
@@ -220,6 +221,27 @@ func scopedTeamPlanCalendarTeamID(actor Actor) *int64 {
 	}
 	noTeamID := int64(-1)
 	return &noTeamID
+}
+
+func visibleMonthlyPlanFiles(actor Actor, files []monthlyentity.PlanFileEntity) []monthlyentity.PlanFileEntity {
+	if actor.Role == policy.RoleSuperAdmin || actor.Role == policy.RoleViewer {
+		return files
+	}
+	if actor.Role != policy.RoleTeamLead && actor.Role != policy.RoleUser {
+		return nil
+	}
+	if actor.TeamID == nil || *actor.TeamID <= 0 {
+		return nil
+	}
+	teamID := *actor.TeamID
+	out := make([]monthlyentity.PlanFileEntity, 0, len(files))
+	for _, file := range files {
+		if file.TeamID == nil || *file.TeamID != teamID {
+			continue
+		}
+		out = append(out, file)
+	}
+	return out
 }
 
 func buildTeamPlanItem(actor teamplanentity.Actor, plan teamplanentity.TeamPlan) CalendarItem {
