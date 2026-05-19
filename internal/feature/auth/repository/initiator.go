@@ -37,6 +37,7 @@ func toAuthUser(m models.User) *entity.AuthUser {
 		Username:     m.Username,
 		Role:         m.Role,
 		TeamID:       m.TeamID,
+		Capabilities: activeCapabilityCodes(m.Capabilities),
 		IsActive:     m.IsActive,
 		LastLogin:    &lastLogin,
 		CreatedAt:    m.CreatedAt.Format(time.RFC3339),
@@ -46,7 +47,7 @@ func toAuthUser(m models.User) *entity.AuthUser {
 
 func (r *repository) FindByUsername(ctx context.Context, username string) (*entity.AuthUser, error) {
 	var m models.User
-	if err := r.db.WithContext(ctx).Where(`"username" = ?`, username).First(&m).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Capabilities", "revoked_at IS NULL").Where(`"username" = ?`, username).First(&m).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, entity.ErrInvalidCredentials
 		}
@@ -57,7 +58,7 @@ func (r *repository) FindByUsername(ctx context.Context, username string) (*enti
 
 func (r *repository) FindByID(ctx context.Context, id uint) (*entity.AuthUser, error) {
 	var m models.User
-	if err := r.db.WithContext(ctx).First(&m, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Capabilities", "revoked_at IS NULL").First(&m, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, entity.ErrUserNotFound
 		}
@@ -68,13 +69,23 @@ func (r *repository) FindByID(ctx context.Context, id uint) (*entity.AuthUser, e
 
 func (r *repository) FindByIDWithTeam(ctx context.Context, id uint) (entity.UserInfo, error) {
 	var m models.User
-	if err := r.db.WithContext(ctx).First(&m, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Capabilities", "revoked_at IS NULL").First(&m, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return entity.UserInfo{}, entity.ErrUserNotFound
 		}
 		return entity.UserInfo{}, err
 	}
 	return toAuthUser(m).ToUserInfo(), nil
+}
+
+func activeCapabilityCodes(items []models.UserCapability) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.RevokedAt == nil {
+			out = append(out, item.Code)
+		}
+	}
+	return out
 }
 
 func (r *repository) Create(ctx context.Context, in entity.CreateUserInput) (entity.UserInfo, error) {

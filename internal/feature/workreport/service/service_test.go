@@ -102,20 +102,23 @@ func TestGetReportScopesTeamForNonPrivilegedUser(t *testing.T) {
 	}
 }
 
-func TestGetReportAllowsAdminToReadRequestedTeam(t *testing.T) {
+func TestGetReportRejectsLegacyAdmin(t *testing.T) {
 	fake := &fakeTaskLister{}
 	svc := NewService(fake)
 
 	ownTeamID := int64(42)
 	requestedTeamID := int64(99)
-	_, _ = svc.GetReport(context.Background(), makeActor("admin", &ownTeamID), GetReportInput{
+	_, err := svc.GetReport(context.Background(), makeActor("admin", &ownTeamID), GetReportInput{
 		Year:   "2026",
 		Month:  "5",
 		TeamID: &requestedTeamID,
 	})
 
-	if fake.capturedQuery.TeamID == nil || *fake.capturedQuery.TeamID != requestedTeamID {
-		t.Fatalf("TeamID = %#v, want requested team %d", fake.capturedQuery.TeamID, requestedTeamID)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("legacy admin got %v, want ErrForbidden", err)
+	}
+	if fake.capturedQuery.Year != "" || fake.capturedQuery.TeamID != nil {
+		t.Fatalf("repository should not be called for legacy admin, got query %#v", fake.capturedQuery)
 	}
 }
 
@@ -236,6 +239,12 @@ func TestGetReportMapsAllTaskFields(t *testing.T) {
 		OperationCenterID:   int64Ptr(5),
 		OperationCenterName: strPtr("North Center"),
 	}
+	sourceType := "large_work"
+	sourceID := int64(501)
+	largeWorkTaskID := int64(9001)
+	task.SourceType = &sourceType
+	task.SourceID = &sourceID
+	task.LargeWorkTaskID = &largeWorkTaskID
 
 	fake := &fakeTaskLister{tasks: []taskentity.Task{task}}
 	svc := NewService(fake)
@@ -331,6 +340,9 @@ func TestGetReportMapsAllTaskFields(t *testing.T) {
 	assertField("OperationCenterName", it.OperationCenterName, "North Center")
 	assertField("URLsBefore", it.URLsBefore, []string{"before1.jpg"})
 	assertField("URLsAfter", it.URLsAfter, []string{"after1.jpg", "after2.jpg"})
+	assertField("SourceType", it.SourceType, "large_work")
+	assertField("SourceID", it.SourceID, int64(501))
+	assertField("LargeWorkTaskID", it.LargeWorkTaskID, int64(9001))
 }
 
 func TestGetReportNilURLsDefaultToEmptySlice(t *testing.T) {

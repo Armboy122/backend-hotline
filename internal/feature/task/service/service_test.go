@@ -165,17 +165,23 @@ func TestCreateAllowsOptionalEvidenceAndLocationFields(t *testing.T) {
 	lat := 13.7563
 	lng := 100.5018
 	detail := "attached evidence and GPS"
+	sourceType := "large_work"
+	sourceID := int64(501)
+	largeWorkTaskID := int64(9001)
 
 	_, err := svc.Create(context.Background(), actor("super_admin", nil), CreateTaskInput{
-		WorkDate:    time.Now(),
-		TeamID:      42,
-		JobTypeID:   1,
-		JobDetailID: 1,
-		Detail:      &detail,
-		URLsBefore:  []string{"before.jpg"},
-		URLsAfter:   []string{"after.jpg"},
-		Latitude:    &lat,
-		Longitude:   &lng,
+		WorkDate:        time.Now(),
+		TeamID:          42,
+		JobTypeID:       1,
+		JobDetailID:     1,
+		Detail:          &detail,
+		URLsBefore:      []string{"before.jpg"},
+		URLsAfter:       []string{"after.jpg"},
+		Latitude:        &lat,
+		Longitude:       &lng,
+		SourceType:      &sourceType,
+		SourceID:        &sourceID,
+		LargeWorkTaskID: &largeWorkTaskID,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -194,6 +200,15 @@ func TestCreateAllowsOptionalEvidenceAndLocationFields(t *testing.T) {
 	}
 	if repo.capturedCreate.Longitude == nil || *repo.capturedCreate.Longitude != lng {
 		t.Fatalf("Longitude = %#v, want %v", repo.capturedCreate.Longitude, lng)
+	}
+	if repo.capturedCreate.SourceType == nil || *repo.capturedCreate.SourceType != sourceType {
+		t.Fatalf("SourceType = %#v, want %q", repo.capturedCreate.SourceType, sourceType)
+	}
+	if repo.capturedCreate.SourceID == nil || *repo.capturedCreate.SourceID != sourceID {
+		t.Fatalf("SourceID = %#v, want %d", repo.capturedCreate.SourceID, sourceID)
+	}
+	if repo.capturedCreate.LargeWorkTaskID == nil || *repo.capturedCreate.LargeWorkTaskID != largeWorkTaskID {
+		t.Fatalf("LargeWorkTaskID = %#v, want %d", repo.capturedCreate.LargeWorkTaskID, largeWorkTaskID)
 	}
 }
 

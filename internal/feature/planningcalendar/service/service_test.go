@@ -148,7 +148,7 @@ func TestGetMonthBuildsCalendarFromTeamAndMonthlyPlans(t *testing.T) {
 		TeamID:          teamID,
 		CreatedByUserID: creatorID,
 		Title:           "Pole repair",
-		StartDate:       start,
+		StartDate:       &start,
 		EndDate:         &end,
 		LocationText:    loc,
 		Status:          teamplanentity.StatusPlanned,

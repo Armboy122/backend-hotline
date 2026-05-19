@@ -30,7 +30,8 @@ func TestGetYearOverviewReturnsAllMonthsWithLockActionsAndFiles(t *testing.T) {
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set("user_id", uint(1))
-		c.Set("role", "admin")
+		c.Set("role", "team_lead")
+		c.Set("team_id", int64(7))
 	})
 	r.GET("/v1/monthly-plans/:year/overview", ctrl.GetYearOverview)
 

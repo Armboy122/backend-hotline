@@ -43,10 +43,23 @@ func actorFromContext(c *gin.Context) (mpdomain.Actor, bool) {
 		}
 	}
 	return mpdomain.Actor{
-		UserID: int64(uid),
-		Role:   role,
-		TeamID: teamID,
+		UserID:       int64(uid),
+		Role:         role,
+		TeamID:       teamID,
+		Capabilities: capabilitiesFromContext(c),
 	}, true
+}
+
+func capabilitiesFromContext(c *gin.Context) []string {
+	raw, exists := c.Get("capabilities")
+	if !exists {
+		return nil
+	}
+	caps, ok := raw.([]string)
+	if !ok {
+		return nil
+	}
+	return append([]string{}, caps...)
 }
 
 func parseOptionalDate(raw *string) (*time.Time, error) {

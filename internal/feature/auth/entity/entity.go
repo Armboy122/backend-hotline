@@ -17,13 +17,14 @@ type Actor struct {
 }
 
 type UserInfo struct {
-	ID        uint
-	Username  string
-	Role      string
-	TeamID    *int64
-	IsActive  bool
-	LastLogin *string
-	CreatedAt string
+	ID           uint
+	Username     string
+	Role         string
+	TeamID       *int64
+	Capabilities []string
+	IsActive     bool
+	LastLogin    *string
+	CreatedAt    string
 }
 
 // AuthUser carries credential fields needed during login/refresh in addition to UserInfo fields.
@@ -32,6 +33,7 @@ type AuthUser struct {
 	Username     string
 	Role         string
 	TeamID       *int64
+	Capabilities []string
 	IsActive     bool
 	LastLogin    *string
 	CreatedAt    string
@@ -40,13 +42,14 @@ type AuthUser struct {
 
 func (a AuthUser) ToUserInfo() UserInfo {
 	return UserInfo{
-		ID:        a.ID,
-		Username:  a.Username,
-		Role:      a.Role,
-		TeamID:    a.TeamID,
-		IsActive:  a.IsActive,
-		LastLogin: a.LastLogin,
-		CreatedAt: a.CreatedAt,
+		ID:           a.ID,
+		Username:     a.Username,
+		Role:         a.Role,
+		TeamID:       a.TeamID,
+		Capabilities: append([]string{}, a.Capabilities...),
+		IsActive:     a.IsActive,
+		LastLogin:    a.LastLogin,
+		CreatedAt:    a.CreatedAt,
 	}
 }
 

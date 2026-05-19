@@ -38,7 +38,7 @@ func TestTeamPlanModelMatchesPlanningPersistenceContract(t *testing.T) {
 func TestTeamPlanDateAndOptionalFieldsUseExpectedGoTypes(t *testing.T) {
 	modelType := reflect.TypeOf(TeamPlan{})
 
-	assertType(t, modelType, "StartDate", reflect.TypeOf(time.Time{}))
+	assertType(t, modelType, "StartDate", reflect.TypeOf((*time.Time)(nil)))
 	assertType(t, modelType, "EndDate", reflect.TypeOf((*time.Time)(nil)))
 	assertType(t, modelType, "WorkTime", reflect.TypeOf((*string)(nil)))
 	assertType(t, modelType, "WorkType", reflect.TypeOf((*string)(nil)))
@@ -51,8 +51,8 @@ func TestTeamPlanDateAndOptionalFieldsUseExpectedGoTypes(t *testing.T) {
 }
 
 func TestTeamPlanStatusConstants(t *testing.T) {
-	statuses := []string{TeamPlanStatusPlanned, TeamPlanStatusCancelled, TeamPlanStatusCompleted}
-	want := []string{"planned", "cancelled", "completed"}
+	statuses := []string{TeamPlanStatusDraft, TeamPlanStatusPlanned, TeamPlanStatusCancelled, TeamPlanStatusCompleted}
+	want := []string{"draft", "planned", "cancelled", "completed"}
 	for i := range want {
 		if statuses[i] != want[i] {
 			t.Fatalf("status[%d] = %q, want %q", i, statuses[i], want[i])

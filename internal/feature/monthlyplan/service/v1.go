@@ -97,6 +97,10 @@ func (s *Service) CanUploadForPeriod(ctx context.Context, actor mpdomain.Actor, 
 	}
 	deadline := submissionDeadline(year, month, settings.LockDay)
 	locked := s.clock().After(deadline)
+	canSubmit := actor.CanUploadMasterPlan() || actor.CanUploadForTeam(actor.TeamID)
+	if !canSubmit {
+		return false, deadline.Format("2006-01-02"), nil
+	}
 	if !locked {
 		return true, deadline.Format("2006-01-02"), nil
 	}

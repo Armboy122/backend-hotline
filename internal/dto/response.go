@@ -314,6 +314,7 @@ type UserResponse struct {
 	Role        string      `json:"role"`
 	TeamID      *int64      `json:"teamId,omitempty"`
 	Team        *TeamNested `json:"team,omitempty"`
+	Capabilities []string    `json:"capabilities,omitempty"`
 	DisplayName *string     `json:"displayName,omitempty"`
 	Position    *string     `json:"position,omitempty"`
 	PhoneNumber *string     `json:"phoneNumber,omitempty"`
@@ -344,14 +345,14 @@ type ContactDirectoryResponse struct {
 type CreateUserRequest struct {
 	Username string `json:"username" binding:"required,len=6,numeric"`
 	Password string `json:"password" binding:"required,min=6"`
-	Role     string `json:"role" binding:"required,oneof=super_admin admin team_lead user viewer"`
+	Role     string `json:"role" binding:"required,oneof=super_admin team_lead user viewer"`
 	TeamID   *int64 `json:"teamId"`
 	IsActive *bool  `json:"isActive"`
 }
 
 type UpdateUserRequest struct {
 	Username *string `json:"username" binding:"omitempty,len=6,numeric"`
-	Role     *string `json:"role" binding:"omitempty,oneof=super_admin admin team_lead user viewer"`
+	Role     *string `json:"role" binding:"omitempty,oneof=super_admin team_lead user viewer"`
 	TeamID   *int64  `json:"teamId"`
 	IsActive *bool   `json:"isActive"`
 }

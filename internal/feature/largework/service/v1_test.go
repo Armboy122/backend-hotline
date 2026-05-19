@@ -99,6 +99,18 @@ func actor(role string, teamID *int64) entity.Actor {
 	return entity.Actor{UserID: 1, Role: role, TeamID: teamID}
 }
 
+type fakeDailyReportCreator struct {
+	calls int
+	input repo.AutoDailyReportInput
+	err   error
+}
+
+func (f *fakeDailyReportCreator) CreateFromLargeWorkTask(_ context.Context, input repo.AutoDailyReportInput) error {
+	f.calls++
+	f.input = input
+	return f.err
+}
+
 func TestCreateAutoAddsOwnerToParticipantsAndDedupes(t *testing.T) {
 	ownerTeamID := int64(7)
 	participantA := int64(8)
@@ -106,7 +118,7 @@ func TestCreateAutoAddsOwnerToParticipantsAndDedupes(t *testing.T) {
 	repo := &fakeRepository{createItem: &entity.LargeWorkItem{ID: 1, OwnerTeamID: 7}}
 	svc := NewService(repo)
 
-	out, err := svc.Create(context.Background(), actor(policy.RoleAdmin, &ownerTeamID), CreateInput{
+	out, err := svc.Create(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), CreateInput{
 		OwnerTeamID:        7,
 		ParticipantTeamIDs: []int64{participantA, participantDup},
 		Title:              "งานระดมทีม เปลี่ยนอุปกรณ์หลัก",
@@ -179,7 +191,7 @@ func TestCreateRejectsEndDateBeforeStartDate(t *testing.T) {
 	endDate := mustDate(t, "2026-06-09")
 	svc := NewService(&fakeRepository{})
 
-	_, err := svc.Create(context.Background(), actor(policy.RoleAdmin, &ownerTeamID), CreateInput{
+	_, err := svc.Create(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), CreateInput{
 		OwnerTeamID:        ownerTeamID,
 		ParticipantTeamIDs: []int64{ownerTeamID, 9},
 		Title:              "งานระดมทีม",
@@ -233,20 +245,13 @@ func TestListDoesNotRepaginateRepositoryPageForSuperAdmin(t *testing.T) {
 	}
 }
 
-func TestListScopesAdminToOwnTeam(t *testing.T) {
+func TestListRejectsLegacyAdmin(t *testing.T) {
 	teamID := int64(7)
 	repo := &fakeRepository{listItems: []entity.LargeWorkItem{{ID: 1, OwnerTeamID: 7}, {ID: 2, OwnerTeamID: 8}}, listTotal: 1}
 	svc := NewService(repo)
 
-	out, err := svc.List(context.Background(), actor(policy.RoleAdmin, &teamID), ListInput{Page: 1, Limit: 20})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if repo.capturedList.TeamID == nil || *repo.capturedList.TeamID != teamID {
-		t.Fatalf("captured team filter = %#v, want %d", repo.capturedList.TeamID, teamID)
-	}
-	if len(out.Items) != 1 || out.Items[0].ID != 1 {
-		t.Fatalf("items = %#v, want only admin own team item", out.Items)
+	if _, err := svc.List(context.Background(), actor(policy.RoleAdmin, &teamID), ListInput{Page: 1, Limit: 20}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("legacy admin list got %v, want ErrForbidden", err)
 	}
 }
 
@@ -316,10 +321,10 @@ func TestUpdateAndCancelAllowTeamLeadForOwnTeamEditableWork(t *testing.T) {
 			repo := &fakeRepository{getItem: blocked, updateItem: blocked}
 			svc := NewService(repo)
 
-			if _, err := svc.Update(context.Background(), actor(policy.RoleAdmin, &ownerTeamID), UpdateInput{ID: 99, Title: strPtr("updated")}); !errors.Is(err, ErrInvalidStateTransition) {
+			if _, err := svc.Update(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), UpdateInput{ID: 99, Title: strPtr("updated")}); !errors.Is(err, ErrInvalidStateTransition) {
 				t.Fatalf("update got %v, want ErrInvalidStateTransition", err)
 			}
-			if _, err := svc.Cancel(context.Background(), actor(policy.RoleAdmin, &ownerTeamID), 99); !errors.Is(err, ErrInvalidStateTransition) {
+			if _, err := svc.Cancel(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), 99); !errors.Is(err, ErrInvalidStateTransition) {
 				t.Fatalf("cancel got %v, want ErrInvalidStateTransition", err)
 			}
 		})
@@ -333,12 +338,12 @@ func TestUpdateRejectsEffectiveEndDateBeforeStartDate(t *testing.T) {
 	svc := NewService(&fakeRepository{getItem: existing, updateItem: existing})
 
 	newEnd := mustDate(t, "2026-06-09")
-	if _, err := svc.Update(context.Background(), actor(policy.RoleAdmin, &ownerTeamID), UpdateInput{ID: 99, EndDate: &newEnd}); !errors.Is(err, ErrInvalidDateRange) {
+	if _, err := svc.Update(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), UpdateInput{ID: 99, EndDate: &newEnd}); !errors.Is(err, ErrInvalidDateRange) {
 		t.Fatalf("end date update got %v, want ErrInvalidDateRange", err)
 	}
 
 	newStart := mustDate(t, "2026-06-13")
-	if _, err := svc.Update(context.Background(), actor(policy.RoleAdmin, &ownerTeamID), UpdateInput{ID: 99, StartDate: &newStart}); !errors.Is(err, ErrInvalidDateRange) {
+	if _, err := svc.Update(context.Background(), actor(policy.RoleTeamLead, &ownerTeamID), UpdateInput{ID: 99, StartDate: &newStart}); !errors.Is(err, ErrInvalidDateRange) {
 		t.Fatalf("start date update got %v, want ErrInvalidDateRange", err)
 	}
 }
@@ -605,6 +610,40 @@ func TestReplaceTasksDefaultsSequencePerAssignedTeam(t *testing.T) {
 	}
 }
 
+func TestCompleteTaskAutoCreatesDailyReportFromLargeWorkTask(t *testing.T) {
+	teamID := int64(8)
+	workerActor := actor(policy.RoleUser, &teamID)
+	workDetail := "ตัดกิ่งไม้ใกล้แนวสาย"
+	before := []string{"https://cdn.example/before.jpg"}
+	planStart := mustDate(t, "2026-06-10")
+	plan := &entity.LargeWorkItem{ID: 501, OwnerTeamID: 7, Title: "งานระดมทีม เปลี่ยนอุปกรณ์หลัก", StartDate: planStart, Status: entity.LargeWorkStatusInProgress, Teams: []entity.LargeWorkTeam{{ID: teamID}}}
+	task := &entity.LargeWorkTask{ID: 11, LargeWorkItemID: 501, AssignedTeamID: teamID, Status: entity.LargeWorkTaskStatusInProgress, PointLabel: "P-001", WorkType: "tree_trim", WorkDetail: &workDetail, BeforePhotoURLs: before}
+	updated := *task
+	updated.Status = entity.LargeWorkTaskStatusDone
+	updated.AfterPhotoURLs = []string{"https://cdn.example/after.jpg"}
+	repo := &fakeRepository{getItem: plan, getTask: task, updateTask: &updated}
+	dailyReports := &fakeDailyReportCreator{}
+	svc := NewServiceWithDailyReport(repo, dailyReports)
+
+	done, err := svc.CompleteTask(context.Background(), workerActor, task.ID, CompleteTaskInput{AfterPhotoURLs: updated.AfterPhotoURLs, CompletionNote: "done"})
+
+	if err != nil || done == nil {
+		t.Fatalf("CompleteTask result=%#v err=%v", done, err)
+	}
+	if dailyReports.calls != 1 {
+		t.Fatalf("daily report calls = %d, want 1", dailyReports.calls)
+	}
+	if dailyReports.input.Plan.ID != plan.ID || dailyReports.input.Task.ID != task.ID || dailyReports.input.Task.AssignedTeamID != teamID {
+		t.Fatalf("daily report input = %#v", dailyReports.input)
+	}
+	if dailyReports.input.CompletedByUserID != workerActor.UserID || dailyReports.input.CompletionNote != "done" {
+		t.Fatalf("daily report completion metadata = %#v", dailyReports.input)
+	}
+	if !reflect.DeepEqual(dailyReports.input.AfterPhotoURLs, updated.AfterPhotoURLs) {
+		t.Fatalf("daily report after photos = %#v, want %#v", dailyReports.input.AfterPhotoURLs, updated.AfterPhotoURLs)
+	}
+}
+
 func TestMyTodosStartPhotoCompleteAndBlockEnforceOwnTeamAndPhotos(t *testing.T) {
 	teamID := int64(8)
 	workerActor := actor(policy.RoleUser, &teamID)
@@ -635,8 +674,9 @@ func TestMyTodosStartPhotoCompleteAndBlockEnforceOwnTeamAndPhotos(t *testing.T) 
 
 	inProgress := &entity.LargeWorkTask{ID: 11, AssignedTeamID: teamID, Status: entity.LargeWorkTaskStatusInProgress, BeforePhotoURLs: []string{beforeURL}}
 	repo.getTask = inProgress
-	if _, err := svc.CompleteTask(context.Background(), workerActor, 11, CompleteTaskInput{CompletionNote: "done"}); !errors.Is(err, ErrPhotoRequired) {
-		t.Fatalf("complete without after got %v, want ErrPhotoRequired", err)
+	doneWithoutAfter, err := svc.CompleteTask(context.Background(), workerActor, 11, CompleteTaskInput{CompletionNote: "done"})
+	if err != nil || doneWithoutAfter == nil || repo.capturedUpdateTask.Status == nil || *repo.capturedUpdateTask.Status != entity.LargeWorkTaskStatusDone {
+		t.Fatalf("complete without after result=%#v err=%v update=%#v", doneWithoutAfter, err, repo.capturedUpdateTask)
 	}
 	if _, err := svc.CompleteTask(context.Background(), workerActor, 11, CompleteTaskInput{AfterPhotoURLs: []string{""}, CompletionNote: "done"}); !errors.Is(err, ErrPhotoRequired) {
 		t.Fatalf("complete with empty after photo got %v, want ErrPhotoRequired", err)

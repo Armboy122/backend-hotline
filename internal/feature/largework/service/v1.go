@@ -159,11 +159,16 @@ type Service interface {
 }
 
 type service struct {
-	repo repo.Repository
+	repo         repo.Repository
+	dailyReports repo.DailyReportCreator
 }
 
 func NewService(repository repo.Repository) Service {
 	return &service{repo: repository}
+}
+
+func NewServiceWithDailyReport(repository repo.Repository, dailyReports repo.DailyReportCreator) Service {
+	return &service{repo: repository, dailyReports: dailyReports}
 }
 
 func (s *service) Create(ctx context.Context, actor entity.Actor, input CreateInput) (*entity.LargeWorkItem, error) {
@@ -234,6 +239,9 @@ func (s *service) GetByID(ctx context.Context, actor entity.Actor, id int64) (*e
 }
 
 func (s *service) List(ctx context.Context, actor entity.Actor, input ListInput) (*ListOutput, error) {
+	if !actor.CanViewLargeWorkOverview() {
+		return nil, ErrForbidden
+	}
 	page := input.Page
 	if page < 1 {
 		page = 1
@@ -609,7 +617,7 @@ func (s *service) CompleteTask(ctx context.Context, actor entity.Actor, taskID i
 		return nil, ErrInvalidStateTransition
 	}
 	after := append(append([]string{}, task.AfterPhotoURLs...), input.AfterPhotoURLs...)
-	if len(task.BeforePhotoURLs) == 0 || !allNonEmptyStrings(task.BeforePhotoURLs) || len(after) == 0 || !allNonEmptyStrings(after) {
+	if !allNonEmptyStrings(task.BeforePhotoURLs) || !allNonEmptyStrings(after) {
 		return nil, ErrPhotoRequired
 	}
 	note := input.CompletionNote
@@ -623,7 +631,62 @@ func (s *service) CompleteTask(ctx context.Context, actor entity.Actor, taskID i
 	if err != nil {
 		return nil, mapRepositoryError(err)
 	}
+	if err := s.createDailyReportForCompletedTask(ctx, actor, task, updated, after, note, now); err != nil {
+		return nil, mapRepositoryError(err)
+	}
 	return updated, nil
+}
+
+func (s *service) createDailyReportForCompletedTask(ctx context.Context, actor entity.Actor, original *entity.LargeWorkTask, updated *entity.LargeWorkTask, after []string, note string, completedAt time.Time) error {
+	if s.dailyReports == nil || original == nil {
+		return nil
+	}
+	plan, err := s.repo.GetByID(ctx, repo.GetQuery{ID: original.LargeWorkItemID})
+	if err != nil {
+		return err
+	}
+	if plan == nil {
+		return ErrNotFound
+	}
+	reportTask := *original
+	if updated != nil {
+		reportTask = *updated
+		if reportTask.LargeWorkItemID == 0 {
+			reportTask.LargeWorkItemID = original.LargeWorkItemID
+		}
+		if reportTask.AssignedTeamID == 0 {
+			reportTask.AssignedTeamID = original.AssignedTeamID
+		}
+		if len(reportTask.BeforePhotoURLs) == 0 {
+			reportTask.BeforePhotoURLs = original.BeforePhotoURLs
+		}
+		if reportTask.WorkDetail == nil {
+			reportTask.WorkDetail = original.WorkDetail
+		}
+		if reportTask.WorkType == "" {
+			reportTask.WorkType = original.WorkType
+		}
+		if reportTask.PointLabel == "" {
+			reportTask.PointLabel = original.PointLabel
+		}
+		if reportTask.Latitude == nil {
+			reportTask.Latitude = original.Latitude
+		}
+		if reportTask.Longitude == nil {
+			reportTask.Longitude = original.Longitude
+		}
+		if reportTask.Metadata == nil {
+			reportTask.Metadata = original.Metadata
+		}
+	}
+	return s.dailyReports.CreateFromLargeWorkTask(ctx, repo.AutoDailyReportInput{
+		Plan:              *plan,
+		Task:              reportTask,
+		CompletedByUserID: actor.UserID,
+		CompletedAt:       completedAt,
+		CompletionNote:    note,
+		AfterPhotoURLs:    after,
+	})
 }
 
 func (s *service) BlockTask(ctx context.Context, actor entity.Actor, taskID int64, reason string) (*entity.LargeWorkTask, error) {

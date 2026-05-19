@@ -15,8 +15,9 @@ func TestMonthlyPlanUploadPolicyAllowsManagersToUploadMasterPlansOnly(t *testing
 		want  bool
 	}{
 		{name: "super admin can upload master plan", actor: Actor{Role: policy.RoleSuperAdmin}, want: true},
-		{name: "admin can upload master plan", actor: Actor{Role: policy.RoleAdmin}, want: true},
-		{name: "team lead cannot upload master plan", actor: Actor{Role: policy.RoleTeamLead, TeamID: &teamID}, want: false},
+		{name: "team lead with upload capability can upload master plan", actor: Actor{Role: policy.RoleTeamLead, TeamID: &teamID, Capabilities: []string{"can_upload_approved_monthly_plan"}}, want: true},
+		{name: "legacy admin cannot upload master plan", actor: Actor{Role: policy.RoleAdmin}, want: false},
+		{name: "team lead without capability cannot upload master plan", actor: Actor{Role: policy.RoleTeamLead, TeamID: &teamID}, want: false},
 		{name: "user cannot upload master plan", actor: Actor{Role: policy.RoleUser, TeamID: &teamID}, want: false},
 	}
 
@@ -65,7 +66,7 @@ func TestViewerCannotDownloadMonthlyPlanFiles(t *testing.T) {
 		want  bool
 	}{
 		{name: "super admin can download", actor: Actor{Role: policy.RoleSuperAdmin}, want: true},
-		{name: "admin can download", actor: Actor{Role: policy.RoleAdmin}, want: true},
+		{name: "legacy admin cannot download", actor: Actor{Role: policy.RoleAdmin}, want: false},
 		{name: "team lead can download", actor: Actor{Role: policy.RoleTeamLead, TeamID: &teamID}, want: true},
 		{name: "user can download", actor: Actor{Role: policy.RoleUser, TeamID: &teamID}, want: true},
 		{name: "viewer cannot download", actor: Actor{Role: policy.RoleViewer, TeamID: &teamID}, want: false},
@@ -84,10 +85,13 @@ func TestSuperAdminCanBypassMonthlyPlanLockEvenWhenAdminOverrideDisabled(t *test
 	if !((Actor{Role: policy.RoleSuperAdmin}).CanUploadAfterLock(false)) {
 		t.Fatalf("expected super_admin to bypass lock regardless of admin override setting")
 	}
-	if (Actor{Role: policy.RoleAdmin}).CanUploadAfterLock(false) {
-		t.Fatalf("expected admin to respect disabled admin override setting")
+	if (Actor{Role: policy.RoleTeamLead, Capabilities: []string{"can_upload_approved_monthly_plan"}}).CanUploadAfterLock(false) {
+		t.Fatalf("expected capability holder to respect disabled override setting")
 	}
-	if !((Actor{Role: policy.RoleAdmin}).CanUploadAfterLock(true)) {
-		t.Fatalf("expected admin to bypass lock when admin override setting is enabled")
+	if !((Actor{Role: policy.RoleTeamLead, Capabilities: []string{"can_upload_approved_monthly_plan"}}).CanUploadAfterLock(true)) {
+		t.Fatalf("expected capability holder to bypass lock when override setting is enabled")
+	}
+	if (Actor{Role: policy.RoleAdmin, Capabilities: []string{"can_upload_approved_monthly_plan"}}).CanUploadAfterLock(true) {
+		t.Fatalf("expected legacy admin to be denied by role validation even with stale capability")
 	}
 }

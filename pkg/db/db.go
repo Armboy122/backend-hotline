@@ -93,6 +93,7 @@ func MigrationModels() []any {
 		&models.Team{},
 		&models.TaskDaily{},
 		&models.User{},
+		&models.UserCapability{},
 		&models.MonthlyPlan{},
 		&models.PlanFile{},
 		&models.FileSizeLog{},
@@ -110,6 +111,8 @@ func ensurePerformanceIndexes(ctx context.Context, db *gorm.DB) error {
 		`CREATE INDEX IF NOT EXISTS taskdaily_active_workdate_team_idx ON "TaskDaily" ("deletedat", "workdate", "teamId")`,
 		`CREATE INDEX IF NOT EXISTS planfile_plan_deleted_team_idx ON "PlanFile" ("monthlyPlanId", "isDeleted", "teamId")`,
 		`CREATE INDEX IF NOT EXISTS monthlyplan_year_month_idx ON "MonthlyPlan" ("year", "month")`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS user_capabilities_active_user_code_idx ON user_capabilities (user_id, code) WHERE revoked_at IS NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS taskdaily_large_work_task_unique_idx ON "TaskDaily" (large_work_task_id) WHERE large_work_task_id IS NOT NULL AND deletedat IS NULL`,
 	}
 	for _, stmt := range statements {
 		if err := db.WithContext(ctx).Exec(stmt).Error; err != nil {

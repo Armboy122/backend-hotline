@@ -14,7 +14,7 @@ import (
 func TestAdminCannotCreateAnyUser(t *testing.T) {
 	svc := NewService(&fakeRepo{})
 	actor := entity.Actor{ID: 10, Role: policy.RoleAdmin}
-	for _, role := range []string{policy.RoleUser, policy.RoleTeamLead, policy.RoleViewer, policy.RoleAdmin, policy.RoleSuperAdmin} {
+	for _, role := range []string{policy.RoleUser, policy.RoleTeamLead, policy.RoleViewer, policy.RoleSuperAdmin} {
 		t.Run(role, func(t *testing.T) {
 			_, err := svc.Create(context.Background(), actor, dto.CreateUserRequest{Username: "123456", Password: "secret1", Role: role})
 			if !errors.Is(err, entity.ErrForbidden) {
@@ -24,18 +24,23 @@ func TestAdminCannotCreateAnyUser(t *testing.T) {
 	}
 }
 
-func TestSuperAdminCanCreateAdminButCannotCreateSecondActiveSuperAdmin(t *testing.T) {
+func TestSuperAdminCanCreateTeamLeadButCannotCreateLegacyAdminOrSecondActiveSuperAdmin(t *testing.T) {
 	ctx := context.Background()
 	repo := &fakeRepo{activeSuperAdmins: 1}
 	svc := NewService(repo)
 	actor := entity.Actor{ID: 1, Role: policy.RoleSuperAdmin}
 
-	created, err := svc.Create(ctx, actor, dto.CreateUserRequest{Username: "123456", Password: "secret1", Role: policy.RoleAdmin})
+	created, err := svc.Create(ctx, actor, dto.CreateUserRequest{Username: "123456", Password: "secret1", Role: policy.RoleTeamLead})
 	if err != nil {
-		t.Fatalf("Create admin: %v", err)
+		t.Fatalf("Create team_lead: %v", err)
 	}
-	if created.Role != policy.RoleAdmin {
-		t.Fatalf("created role = %q, want admin", created.Role)
+	if created.Role != policy.RoleTeamLead {
+		t.Fatalf("created role = %q, want team_lead", created.Role)
+	}
+
+	_, err = svc.Create(ctx, actor, dto.CreateUserRequest{Username: "345678", Password: "secret1", Role: policy.RoleAdmin})
+	if !errors.Is(err, entity.ErrInvalidRole) {
+		t.Fatalf("Create legacy admin: got %v, want ErrInvalidRole", err)
 	}
 
 	_, err = svc.Create(ctx, actor, dto.CreateUserRequest{Username: "234567", Password: "secret1", Role: policy.RoleSuperAdmin})
@@ -65,7 +70,7 @@ func TestCannotDemoteOrDeactivateOnlyActiveSuperAdmin(t *testing.T) {
 	svc := NewService(repo)
 	actor := entity.Actor{ID: 1, Role: policy.RoleSuperAdmin}
 
-	role := policy.RoleAdmin
+	role := policy.RoleUser
 	if _, err := svc.Update(ctx, actor, 1, dto.UpdateUserRequest{Role: &role}); !errors.Is(err, entity.ErrCannotRemoveOnlySuperAdmin) {
 		t.Fatalf("demote only super_admin: got %v, want ErrCannotRemoveOnlySuperAdmin", err)
 	}

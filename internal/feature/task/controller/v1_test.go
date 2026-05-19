@@ -60,6 +60,9 @@ func TestListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
 	now := time.Date(2026, 4, 28, 12, 30, 0, 0, time.UTC)
 	feederID := int64(7)
 	operationCenterID := int64(55)
+	sourceType := "large_work"
+	sourceID := int64(501)
+	largeWorkTaskID := int64(9001)
 	task := taskentity.Task{
 		ID:                  101,
 		WorkDate:            workDate,
@@ -69,6 +72,9 @@ func TestListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
 		FeederID:            &feederID,
 		URLsBefore:          []string{"before-1"},
 		URLsAfter:           []string{"after-1"},
+		SourceType:          &sourceType,
+		SourceID:            &sourceID,
+		LargeWorkTaskID:     &largeWorkTaskID,
 		CreatedAt:           now,
 		UpdatedAt:           now,
 		TeamName:            stringPtr("Team Alpha"),
@@ -151,6 +157,9 @@ func TestListReturnsStandardEnvelopeAndNestedTaskData(t *testing.T) {
 	}
 	if got.Feeder.Station.OperationCenter.Name != "Center A" {
 		t.Fatalf("operation center = %#v, want Center A", got.Feeder.Station.OperationCenter)
+	}
+	if got.SourceType == nil || *got.SourceType != sourceType || got.SourceID == nil || *got.SourceID != sourceID || got.LargeWorkTaskID == nil || *got.LargeWorkTaskID != largeWorkTaskID {
+		t.Fatalf("source fields = type:%#v source:%#v largeTask:%#v", got.SourceType, got.SourceID, got.LargeWorkTaskID)
 	}
 }
 

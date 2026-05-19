@@ -37,6 +37,9 @@ type ReportItem struct {
 	URLsAfter           []string `json:"urlsAfter,omitempty"`
 	Latitude            *float64 `json:"latitude,omitempty"`
 	Longitude           *float64 `json:"longitude,omitempty"`
+	SourceType          *string  `json:"sourceType,omitempty"`
+	SourceID            *int64   `json:"sourceId,omitempty"`
+	LargeWorkTaskID     *int64   `json:"largeWorkTaskId,omitempty"`
 	CreatedAt           string   `json:"createdAt"`
 	UpdatedAt           string   `json:"updatedAt"`
 }
@@ -92,12 +95,9 @@ func (s *Service) GetReport(ctx context.Context, actor taskentity.Actor, input G
 		return nil, ErrYearMonthRequired
 	}
 
-	// Scope team to actor's own team for non-privileged users. Work reports allow
-	// both super_admin and admin to read all teams; team_lead/user/viewer remain
-	// own-team scoped.
-	teamID := input.TeamID
-	if actor.Role != policy.RoleSuperAdmin && actor.Role != policy.RoleAdmin {
-		teamID = actor.ScopedTeamID(input.TeamID)
+	teamID, err := scopedReportTeamID(actor, input.TeamID)
+	if err != nil {
+		return nil, err
 	}
 
 	tasks, err := s.tasks.ListByFilter(ctx, taskrepository.ByFilterQuery{
@@ -134,6 +134,9 @@ func (s *Service) GetReport(ctx context.Context, actor taskentity.Actor, input G
 			URLsAfter:           t.URLsAfter,
 			Latitude:            t.Latitude,
 			Longitude:           t.Longitude,
+			SourceType:          t.SourceType,
+			SourceID:            t.SourceID,
+			LargeWorkTaskID:     t.LargeWorkTaskID,
 			CreatedAt:           t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt:           t.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		}
@@ -175,4 +178,20 @@ func (s *Service) GetReport(ctx context.Context, actor taskentity.Actor, input G
 		},
 		Items: items,
 	}, nil
+}
+
+func scopedReportTeamID(actor taskentity.Actor, requested *int64) (*int64, error) {
+	if actor.Role == policy.RoleSuperAdmin {
+		return requested, nil
+	}
+	switch actor.Role {
+	case policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
+	default:
+		return nil, ErrForbidden
+	}
+	if actor.TeamID == nil || *actor.TeamID <= 0 {
+		return nil, ErrForbidden
+	}
+	teamID := *actor.TeamID
+	return &teamID, nil
 }

@@ -22,11 +22,12 @@ func TestServiceCreateEnforcesRoleAndTeamScope(t *testing.T) {
 
 	repo := &fakeRepo{}
 	svc := NewService(repo)
+	startDate := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
 
 	input := CreateInput{
 		TeamID:       teamID,
 		Title:        "Patrol feeder A",
-		StartDate:    time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
+		StartDate:    &startDate,
 		LocationText: "Bang Khen",
 	}
 	if _, err := svc.Create(ctx, lead, input); err != nil {
@@ -67,11 +68,11 @@ func TestServiceCreateEnforcesRoleAndTeamScope(t *testing.T) {
 	repo = &fakeRepo{}
 	svc = NewService(repo)
 	input.TeamID = teamID
-	if _, err := svc.Create(ctx, admin, input); err != nil {
-		t.Fatalf("admin own-team create: %v", err)
+	if _, err := svc.Create(ctx, admin, input); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("legacy admin own-team create expected forbidden, got %v", err)
 	}
-	if repo.createInput == nil || repo.createInput.TeamID != teamID || repo.createInput.CreatedByUserID != admin.UserID {
-		t.Fatalf("expected admin create input captured for own team, got %+v", repo.createInput)
+	if repo.createCalled {
+		t.Fatalf("repository should not be called for legacy admin create")
 	}
 
 	viewer := entity.Actor{UserID: 5, Role: policy.RoleViewer, TeamID: &teamID}
@@ -113,30 +114,42 @@ func TestServiceListScopesTeamActorsToTheirOwnTeam(t *testing.T) {
 	}
 }
 
-func TestServiceListScopesAdminToOwnTeam(t *testing.T) {
+func TestServiceListRejectsLegacyAdmin(t *testing.T) {
 	ctx := context.Background()
 	teamID := int64(7)
-	otherTeamID := int64(8)
 	admin := entity.Actor{UserID: 4, Role: policy.RoleAdmin, TeamID: &teamID}
 	from := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
 
 	repo := &fakeRepo{}
 	svc := NewService(repo)
-	if _, err := svc.List(ctx, admin, ListInput{From: from, To: to}); err != nil {
-		t.Fatalf("admin list own team: %v", err)
-	}
-	if repo.listInput.TeamID == nil || *repo.listInput.TeamID != teamID {
-		t.Fatalf("list should constrain admin to own team, got query %+v", repo.listInput)
-	}
-
-	repo = &fakeRepo{}
-	svc = NewService(repo)
-	if _, err := svc.List(ctx, admin, ListInput{From: from, To: to, TeamID: &otherTeamID}); !errors.Is(err, entity.ErrForbidden) {
-		t.Fatalf("admin cross-team list expected forbidden, got %v", err)
+	if _, err := svc.List(ctx, admin, ListInput{From: from, To: to}); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("legacy admin list expected forbidden, got %v", err)
 	}
 	if repo.listCalled {
-		t.Fatalf("repository should not be called on forbidden cross-team list")
+		t.Fatalf("repository should not be called for legacy admin list")
+	}
+}
+
+func TestServiceListAllowsDraftBoardWithoutDateRange(t *testing.T) {
+	ctx := context.Background()
+	teamID := int64(7)
+	actor := entity.Actor{UserID: 3, Role: policy.RoleUser, TeamID: &teamID}
+	repo := &fakeRepo{}
+	svc := NewService(repo)
+
+	out, err := svc.List(ctx, actor, ListInput{Status: []string{entity.StatusDraft}})
+	if err != nil {
+		t.Fatalf("draft board list without date range: %v", err)
+	}
+	if out.Page != 1 || out.Limit != 50 {
+		t.Fatalf("pagination defaults = page %d limit %d, want 1/50", out.Page, out.Limit)
+	}
+	if repo.listInput.TeamID == nil || *repo.listInput.TeamID != teamID {
+		t.Fatalf("draft board should be scoped to own team, got query %+v", repo.listInput)
+	}
+	if !repo.listInput.From.IsZero() || !repo.listInput.To.IsZero() {
+		t.Fatalf("draft board should not force date range, got query %+v", repo.listInput)
 	}
 }
 
@@ -180,7 +193,7 @@ func TestServiceUpdateRejectsStartOnlyDateAfterExistingEndDate(t *testing.T) {
 		TeamID:          teamID,
 		CreatedByUserID: creatorID,
 		Status:          entity.StatusPlanned,
-		StartDate:       time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
+		StartDate:       ptrTime(time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)),
 		EndDate:         &endDate,
 	}
 	repo := &fakeRepo{getByIDResult: &plan}
@@ -207,7 +220,7 @@ func TestServiceUpdateRejectsEndOnlyDateBeforeExistingStartDate(t *testing.T) {
 		TeamID:          teamID,
 		CreatedByUserID: creatorID,
 		Status:          entity.StatusPlanned,
-		StartDate:       time.Date(2026, 6, 3, 17, 0, 0, 0, time.Local),
+		StartDate:       ptrTime(time.Date(2026, 6, 3, 17, 0, 0, 0, time.Local)),
 	}
 	repo := &fakeRepo{getByIDResult: &plan}
 	svc := NewService(repo)
@@ -257,8 +270,8 @@ func TestServiceUpdateAndDeleteEnforceOwnershipRules(t *testing.T) {
 
 	repo = &fakeRepo{getByIDResult: &completed}
 	svc = NewService(repo)
-	if _, err := svc.Update(ctx, user, UpdateInput{ID: completed.ID, Title: &newTitle}); !errors.Is(err, entity.ErrForbidden) {
-		t.Fatalf("user update completed expected forbidden, got %v", err)
+	if _, err := svc.Update(ctx, user, UpdateInput{ID: completed.ID, Title: &newTitle}); err != nil {
+		t.Fatalf("user update completed own-team item: %v", err)
 	}
 
 	repo = &fakeRepo{getByIDResult: &otherTeamPlan}
@@ -275,11 +288,11 @@ func TestServiceUpdateAndDeleteEnforceOwnershipRules(t *testing.T) {
 
 	repo = &fakeRepo{getByIDResult: &plan}
 	svc = NewService(repo)
-	if err := svc.Delete(ctx, user, plan.ID); !errors.Is(err, entity.ErrForbidden) {
-		t.Fatalf("user delete expected forbidden, got %v", err)
+	if err := svc.Delete(ctx, user, plan.ID); err != nil {
+		t.Fatalf("user delete own-team item: %v", err)
 	}
-	if repo.deleteCalled {
-		t.Fatalf("repository should not be called on forbidden delete")
+	if repo.deleteInput == nil || repo.deleteInput.ID != plan.ID {
+		t.Fatalf("expected user delete input captured, got %+v", repo.deleteInput)
 	}
 
 	repo = &fakeRepo{getByIDResult: &plan}
@@ -298,116 +311,85 @@ func TestServiceUpdateAndDeleteEnforceOwnershipRules(t *testing.T) {
 	}
 }
 
-func TestServiceAdminCRUDOwnTeam(t *testing.T) {
+func TestServiceLegacyAdminCannotCRUDOwnTeam(t *testing.T) {
 	ctx := context.Background()
 	teamID := int64(7)
 	otherTeamID := int64(8)
 	admin := entity.Actor{UserID: 4, Role: policy.RoleAdmin, TeamID: &teamID}
 
-	// --- Create: admin can create for own team ---
 	repo := &fakeRepo{}
 	svc := NewService(repo)
 	input := CreateInput{
 		TeamID:       teamID,
-		Title:        "Admin plan",
-		StartDate:    time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+		Title:        "Legacy admin plan",
+		StartDate:    ptrTime(time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)),
 		LocationText: "HQ",
 	}
-	created, err := svc.Create(ctx, admin, input)
-	if err != nil {
-		t.Fatalf("admin create own team: %v", err)
-	}
-	if created.TeamID != teamID {
-		t.Fatalf("expected teamID %d, got %d", teamID, created.TeamID)
+	if _, err := svc.Create(ctx, admin, input); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("legacy admin create own team expected forbidden, got %v", err)
 	}
 
-	// --- Create: admin cannot create for other team ---
 	repo = &fakeRepo{}
 	svc = NewService(repo)
 	input = CreateInput{
 		TeamID:       otherTeamID,
 		Title:        "Sneaky plan",
-		StartDate:    time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+		StartDate:    ptrTime(time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)),
 		LocationText: "Elsewhere",
 	}
 	if _, err := svc.Create(ctx, admin, input); !errors.Is(err, entity.ErrForbidden) {
-		t.Fatalf("admin create other team expected forbidden, got %v", err)
+		t.Fatalf("legacy admin create other team expected forbidden, got %v", err)
 	}
 
-	// --- GetByID: admin can view own-team plan ---
 	ownPlan := entity.TeamPlan{ID: 50, TeamID: teamID, CreatedByUserID: 4, Status: entity.StatusPlanned}
 	repo = &fakeRepo{getByIDResult: &ownPlan}
 	svc = NewService(repo)
-	got, err := svc.GetByID(ctx, admin, ownPlan.ID)
-	if err != nil {
-		t.Fatalf("admin get own team: %v", err)
-	}
-	if got.ID != ownPlan.ID {
-		t.Fatalf("expected plan ID %d, got %d", ownPlan.ID, got.ID)
+	if _, err := svc.GetByID(ctx, admin, ownPlan.ID); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("legacy admin get own team expected forbidden, got %v", err)
 	}
 
-	// --- Update: admin can update own-team plan ---
 	repo = &fakeRepo{getByIDResult: &ownPlan}
 	svc = NewService(repo)
 	newTitle := "Admin updated"
-	if _, err := svc.Update(ctx, admin, UpdateInput{ID: ownPlan.ID, Title: &newTitle}); err != nil {
-		t.Fatalf("admin update own team: %v", err)
+	if _, err := svc.Update(ctx, admin, UpdateInput{ID: ownPlan.ID, Title: &newTitle}); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("legacy admin update own team expected forbidden, got %v", err)
 	}
 
-	// --- Update: admin cannot update other-team plan ---
 	otherPlan := entity.TeamPlan{ID: 51, TeamID: otherTeamID, CreatedByUserID: 99, Status: entity.StatusPlanned}
 	repo = &fakeRepo{getByIDResult: &otherPlan}
 	svc = NewService(repo)
 	if _, err := svc.Update(ctx, admin, UpdateInput{ID: otherPlan.ID, Title: &newTitle}); !errors.Is(err, entity.ErrForbidden) {
-		t.Fatalf("admin update other team expected forbidden, got %v", err)
+		t.Fatalf("legacy admin update other team expected forbidden, got %v", err)
 	}
 
-	// --- Delete: admin can delete own-team plan ---
 	repo = &fakeRepo{getByIDResult: &ownPlan}
 	svc = NewService(repo)
-	if err := svc.Delete(ctx, admin, ownPlan.ID); err != nil {
-		t.Fatalf("admin delete own team: %v", err)
+	if err := svc.Delete(ctx, admin, ownPlan.ID); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("legacy admin delete own team expected forbidden, got %v", err)
 	}
 
-	// --- Delete: admin cannot delete other-team plan ---
 	repo = &fakeRepo{getByIDResult: &otherPlan}
 	svc = NewService(repo)
 	if err := svc.Delete(ctx, admin, otherPlan.ID); !errors.Is(err, entity.ErrForbidden) {
-		t.Fatalf("admin delete other team expected forbidden, got %v", err)
+		t.Fatalf("legacy admin delete other team expected forbidden, got %v", err)
 	}
 }
 
-func TestServiceAdminListScopedToOwnTeam(t *testing.T) {
+func TestServiceLegacyAdminListForbidden(t *testing.T) {
 	ctx := context.Background()
 	teamID := int64(7)
-	otherTeamID := int64(8)
 	admin := entity.Actor{UserID: 4, Role: policy.RoleAdmin, TeamID: &teamID}
 
 	from := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
 
-	// Admin list without explicit teamID → scoped to own team
 	repo := &fakeRepo{}
 	svc := NewService(repo)
-	if _, err := svc.List(ctx, admin, ListInput{From: from, To: to}); err != nil {
-		t.Fatalf("admin list own team: %v", err)
+	if _, err := svc.List(ctx, admin, ListInput{From: from, To: to, TeamID: &teamID}); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("legacy admin list expected forbidden, got %v", err)
 	}
-	if repo.listInput.TeamID == nil || *repo.listInput.TeamID != teamID {
-		t.Fatalf("expected list scoped to team %d, got %v", teamID, repo.listInput.TeamID)
-	}
-
-	// Admin list with own teamID → allowed
-	repo = &fakeRepo{}
-	svc = NewService(repo)
-	if _, err := svc.List(ctx, admin, ListInput{From: from, To: to, TeamID: &teamID}); err != nil {
-		t.Fatalf("admin list with own teamID: %v", err)
-	}
-
-	// Admin list with other teamID → forbidden
-	repo = &fakeRepo{}
-	svc = NewService(repo)
-	if _, err := svc.List(ctx, admin, ListInput{From: from, To: to, TeamID: &otherTeamID}); !errors.Is(err, entity.ErrForbidden) {
-		t.Fatalf("admin list other team expected forbidden, got %v", err)
+	if repo.listCalled {
+		t.Fatalf("repository should not be called for legacy admin list")
 	}
 }
 
@@ -444,7 +426,7 @@ func (f *fakeRepo) GetByID(context.Context, repository.GetQuery) (*entity.TeamPl
 func (f *fakeRepo) Create(_ context.Context, input repository.CreateInput) (*entity.TeamPlan, error) {
 	f.createCalled = true
 	f.createInput = &input
-	return &entity.TeamPlan{ID: 100, TeamID: input.TeamID, CreatedByUserID: input.CreatedByUserID, Title: input.Title, StartDate: input.StartDate, LocationText: input.LocationText, Status: entity.StatusPlanned}, nil
+	return &entity.TeamPlan{ID: 100, TeamID: input.TeamID, CreatedByUserID: input.CreatedByUserID, Title: input.Title, StartDate: input.StartDate, LocationText: input.LocationText, Status: input.Status}, nil
 }
 
 func (f *fakeRepo) Update(_ context.Context, input repository.UpdateInput) (*entity.TeamPlan, error) {
@@ -456,9 +438,9 @@ func (f *fakeRepo) Update(_ context.Context, input repository.UpdateInput) (*ent
 	} else if f.getByIDResult != nil {
 		teamID = f.getByIDResult.TeamID
 	}
-	startDate := time.Time{}
+	var startDate *time.Time
 	if input.StartDate != nil {
-		startDate = *input.StartDate
+		startDate = input.StartDate
 	} else if f.getByIDResult != nil {
 		startDate = f.getByIDResult.StartDate
 	}
@@ -487,4 +469,8 @@ func (f *fakeRepo) SoftDelete(_ context.Context, cmd repository.DeleteCommand) e
 	f.deleteCalled = true
 	f.deleteInput = &cmd
 	return nil
+}
+
+func ptrTime(t time.Time) *time.Time {
+	return &t
 }

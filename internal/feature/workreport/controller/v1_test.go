@@ -45,7 +45,7 @@ func TestGetReportPassesYearMonthTeamAndActorToService(t *testing.T) {
 	requestedTeamID := int64(9)
 	fake := &fakeWorkReportService{result: &service.GetReportOutput{Summary: service.Summary{TotalTasks: 1}, Items: []service.ReportItem{{ID: 101, WorkDate: "2026-05-03", TeamID: requestedTeamID}}}}
 	ctrl := NewController(fake)
-	r := workReportTestRouter(ctrl, policy.RoleAdmin, 7)
+	r := workReportTestRouter(ctrl, policy.RoleTeamLead, 7)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/v1/work-reports?year=2026&month=5&teamId=9", nil)
@@ -54,7 +54,7 @@ func TestGetReportPassesYearMonthTeamAndActorToService(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s, want 200", rec.Code, rec.Body.String())
 	}
-	if fake.capturedActor.Role != policy.RoleAdmin || fake.capturedActor.TeamID == nil || *fake.capturedActor.TeamID != 7 {
+	if fake.capturedActor.Role != policy.RoleTeamLead || fake.capturedActor.TeamID == nil || *fake.capturedActor.TeamID != 7 {
 		t.Fatalf("actor = %#v", fake.capturedActor)
 	}
 	if fake.capturedInput.Year != "2026" || fake.capturedInput.Month != "5" {

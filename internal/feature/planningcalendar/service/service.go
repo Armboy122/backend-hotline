@@ -231,11 +231,14 @@ func buildTeamPlanItem(actor teamplanentity.Actor, plan teamplanentity.TeamPlan)
 		WorkType:   plan.WorkType,
 		WorkTime:   plan.WorkTime,
 		Status:     plan.Status,
-		DateRange:  DateRange{StartDate: plan.StartDate.Format(dateLayout)},
+		DateRange:  DateRange{},
 		Actions: ItemActions{
 			CanEdit:   actor.CanUpdateTeamPlan(plan),
 			CanDelete: actor.CanDeleteTeamPlan(plan),
 		},
+	}
+	if plan.StartDate != nil {
+		item.DateRange.StartDate = plan.StartDate.Format(dateLayout)
 	}
 	if plan.Team != nil {
 		item.Team = &TeamRef{ID: plan.Team.ID, Name: plan.Team.Name}
@@ -243,7 +246,7 @@ func buildTeamPlanItem(actor teamplanentity.Actor, plan teamplanentity.TeamPlan)
 	if plan.EndDate != nil && !plan.EndDate.IsZero() {
 		end := plan.EndDate.Format(dateLayout)
 		item.DateRange.EndDate = &end
-	} else {
+	} else if plan.StartDate != nil {
 		end := plan.StartDate.Format(dateLayout)
 		item.DateRange.EndDate = &end
 	}

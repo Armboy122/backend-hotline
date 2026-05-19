@@ -10,6 +10,9 @@ import (
 	"backend-hotlines3/internal/feature/auth/policy"
 	authrepository "backend-hotlines3/internal/feature/auth/repository"
 	authservice "backend-hotlines3/internal/feature/auth/service"
+	capabilitycontroller "backend-hotlines3/internal/feature/capability/controller"
+	capabilityrepository "backend-hotlines3/internal/feature/capability/repository"
+	capabilityservice "backend-hotlines3/internal/feature/capability/service"
 	dailyreportdraftcontroller "backend-hotlines3/internal/feature/dailyreportdraft/controller"
 	dailyreportdraftservice "backend-hotlines3/internal/feature/dailyreportdraft/service"
 	dashboardcontroller "backend-hotlines3/internal/feature/dashboard/controller"
@@ -100,6 +103,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 	{
 		// Auth middleware
 		authMw := middleware.NewAuthMiddleware(jwtManager)
+		capabilityRepo := capabilityrepository.NewRepository(db)
+		capabilitySvc := capabilityservice.NewService(capabilityRepo)
+		capabilityCtrl := capabilitycontroller.NewController(capabilitySvc)
 
 		// Auth Routes — no CDN cache (mutations + user-specific)
 		{
@@ -108,13 +114,20 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			aCtrl := authcontroller.NewController(aSvc)
 			authGroup := apiV1.Group("/auth")
 			authGroup.POST("/login", aCtrl.Login)
-			authGroup.POST("/register", aCtrl.Register)
+			authGroup.POST("/register", authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...), aCtrl.Register)
 			authGroup.POST("/refresh", aCtrl.RefreshToken)
 			authGroup.POST("/logout", authMw.RequireAuth(), aCtrl.Logout)
 			authGroup.GET("/me", authMw.RequireAuth(), middleware.CachePrivate(30), aCtrl.Me)
 		}
 
 		// ── Master Data Feature (Phase D) ───────────────────────────────────
+
+		// Capabilities — round-1 capability grant/revoke for approved monthly plan upload.
+		{
+			capabilitiesV1 := apiV1.Group("/capabilities")
+			capabilitiesV1.Use(authMw.RequireAuth(), authMw.RequireRole(superAdminOnlyRoles()...))
+			capabilitiesV1.GET("", capabilityCtrl.List)
+		}
 
 		// Teams — cache 2 minutes (has task counts that update with new tasks)
 		teamsV1 := apiV1.Group("/teams")
@@ -256,6 +269,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			log.Printf("Warning: Upload handler initialization failed: %v", err)
 		} else {
 			uploadV1 := apiV1.Group("/upload")
+			uploadV1.Use(authMw.RequireAuth())
 			{
 				uploadV1.POST("/image", uploadHandler.GetPresignedURL)
 				uploadV1.DELETE("/*key", uploadHandler.DeleteFile)
@@ -291,7 +305,8 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 		// Large Work Items (งานระดมทีม)
 		{
 			lwRepo := largeworkrepository.NewRepository(db)
-			lwSvc := largeworkservice.NewService(lwRepo)
+			lwDailyReports := largeworkrepository.NewDailyReportCreator(db)
+			lwSvc := largeworkservice.NewServiceWithDailyReport(lwRepo, lwDailyReports)
 			lwCtrl := largeworkcontroller.NewController(lwSvc)
 			largeWorksV1 := apiV1.Group("/large-work-items")
 			largeWorksV1.Use(authMw.RequireAuth())
@@ -334,7 +349,16 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 		}
 		if monthlyPlanController != nil {
 			monthlyPlansV1 := apiV1.Group("/monthly-plans")
-			monthlyPlansV1.Use(authMw.RequireAuth())
+			monthlyPlansV1.Use(authMw.RequireAuth(), func(c *gin.Context) {
+				if uid, ok := c.Get("user_id"); ok {
+					if userID, ok := uid.(uint); ok {
+						if caps, err := capabilityRepo.ListCodesByUserID(c.Request.Context(), userID); err == nil {
+							c.Set("capabilities", caps)
+						}
+					}
+				}
+				c.Next()
+			})
 			{
 				// Settings (admin only)
 				adminOnly := monthlyPlansV1.Group("")
@@ -400,6 +424,8 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			adminUsers.Use(authMw.RequireRole(superAdminOnlyRoles()...))
 			{
 				adminUsers.GET("", middleware.CachePrivate(), uCtrl.List)
+				adminUsers.GET("/:id/capabilities", middleware.CachePrivate(), capabilityCtrl.ListForUser)
+				adminUsers.PUT("/:id/capabilities", capabilityCtrl.ReplaceForUser)
 				adminUsers.GET("/:id", middleware.CachePrivate(), uCtrl.GetByID)
 				adminUsers.POST("", uCtrl.Create)
 				adminUsers.PUT("/:id", uCtrl.Update)
@@ -425,7 +451,7 @@ func superAdminOnlyRoles() []string {
 }
 
 func monthlyPlanManagerRoles() []string {
-	return []string{policy.RoleSuperAdmin, policy.RoleAdmin}
+	return []string{policy.RoleSuperAdmin}
 }
 
 func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {

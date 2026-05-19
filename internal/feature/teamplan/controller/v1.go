@@ -60,7 +60,9 @@ func actorFromContext(ctx *gin.Context) (entity.Actor, bool) {
 	return entity.Actor{UserID: int64(uid), Role: role, TeamID: teamID}, true
 }
 
-func errResp(code, message string) *dto.ErrorInfo { return &dto.ErrorInfo{Code: code, Message: message} }
+func errResp(code, message string) *dto.ErrorInfo {
+	return &dto.ErrorInfo{Code: code, Message: message}
+}
 
 func mapErr(err error) int {
 	switch {
@@ -171,10 +173,14 @@ func (c *Controller) Create(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("VALIDATION_ERROR", err.Error())})
 		return
 	}
-	startDate, err := parseDate(strings.TrimSpace(req.StartDate))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("INVALID_DATE", "Invalid start date format. Use YYYY-MM-DD")})
-		return
+	var startDate *time.Time
+	if req.StartDate != nil && strings.TrimSpace(*req.StartDate) != "" {
+		parsed, err := parseDate(strings.TrimSpace(*req.StartDate))
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("INVALID_DATE", "Invalid start date format. Use YYYY-MM-DD")})
+			return
+		}
+		startDate = &parsed
 	}
 	endDate, err := parseOptionalDate(req.EndDate)
 	if err != nil {
@@ -226,7 +232,7 @@ func (c *Controller) Update(ctx *gin.Context) {
 		}
 	}
 	var startDate *time.Time
-	if req.StartDate != nil {
+	if req.StartDate != nil && strings.TrimSpace(*req.StartDate) != "" {
 		parsed, err := parseDate(strings.TrimSpace(*req.StartDate))
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("INVALID_DATE", "Invalid start date format. Use YYYY-MM-DD")})
@@ -272,7 +278,6 @@ func toResponse(plan entity.TeamPlan, actor entity.Actor) teamplandto.TeamPlanRe
 		CreatedByUserID:   plan.CreatedByUserID,
 		Title:             plan.Title,
 		WorkType:          plan.WorkType,
-		StartDate:         plan.StartDate.UTC().Format("2006-01-02"),
 		WorkTime:          plan.WorkTime,
 		LocationText:      plan.LocationText,
 		PEAID:             plan.PEAID,
@@ -285,6 +290,10 @@ func toResponse(plan entity.TeamPlan, actor entity.Actor) teamplandto.TeamPlanRe
 		CreatedAt:         plan.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:         plan.UpdatedAt.UTC().Format(time.RFC3339),
 		Actions:           teamplandto.TeamPlanActionRef{CanEdit: actor.CanUpdateTeamPlan(plan), CanDelete: actor.CanDeleteTeamPlan(plan)},
+	}
+	if plan.StartDate != nil {
+		start := plan.StartDate.UTC().Format("2006-01-02")
+		resp.StartDate = &start
 	}
 	if plan.EndDate != nil {
 		end := plan.EndDate.UTC().Format("2006-01-02")

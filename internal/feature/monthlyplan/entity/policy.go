@@ -4,9 +4,10 @@ import "backend-hotlines3/internal/feature/auth/policy"
 
 // Actor represents the authenticated user making a request.
 type Actor struct {
-	UserID int64
-	Role   string // "admin", "manager", "staff", etc.
-	TeamID *int64 // nil if user has no team assignment
+	UserID       int64
+	Role         string
+	TeamID       *int64
+	Capabilities []string
 }
 
 // IsAdmin returns true if the actor has monthly-plan manager capability.
@@ -15,7 +16,7 @@ func (a Actor) IsAdmin() bool {
 }
 
 func (a Actor) IsTeamSubmitter() bool {
-	return a.Role == policy.RoleAdmin || a.Role == policy.RoleTeamLead || a.Role == policy.RoleUser
+	return a.Role == policy.RoleTeamLead || a.Role == policy.RoleUser
 }
 
 // CanUploadAfterLock checks if actor can bypass the lock.
@@ -24,12 +25,30 @@ func (a Actor) CanUploadAfterLock(adminCanUpload bool) bool {
 	if a.Role == policy.RoleSuperAdmin {
 		return true
 	}
-	return a.Role == policy.RoleAdmin && adminCanUpload
+	return adminCanUpload && a.canUseApprovedMonthlyPlanCapability()
 }
 
 // CanUploadMasterPlan only admins can upload master plans.
 func (a Actor) CanUploadMasterPlan() bool {
-	return a.IsAdmin()
+	return a.Role == policy.RoleSuperAdmin || a.canUseApprovedMonthlyPlanCapability()
+}
+
+func (a Actor) canUseApprovedMonthlyPlanCapability() bool {
+	switch a.Role {
+	case policy.RoleTeamLead, policy.RoleUser:
+		return a.HasCapability("can_upload_approved_monthly_plan")
+	default:
+		return false
+	}
+}
+
+func (a Actor) HasCapability(code string) bool {
+	for _, capability := range a.Capabilities {
+		if capability == code {
+			return true
+		}
+	}
+	return false
 }
 
 // CanUploadForTeam checks if actor can upload on behalf of a specific team.
@@ -47,7 +66,12 @@ func (a Actor) CanUploadForTeam(teamID *int64) bool {
 // CanDownloadFile checks if actor can download a monthly plan file.
 // Viewer role is always blocked from downloading per Requirement A.
 func (a Actor) CanDownloadFile() bool {
-	return a.Role != policy.RoleViewer
+	switch a.Role {
+	case policy.RoleSuperAdmin, policy.RoleTeamLead, policy.RoleUser:
+		return true
+	default:
+		return false
+	}
 }
 
 // CanAccessFile checks if actor can access a non-master-plan file.
@@ -55,6 +79,11 @@ func (a Actor) CanDownloadFile() bool {
 func (a Actor) CanAccessFile(fileTeamID *int64) bool {
 	if a.Role == policy.RoleSuperAdmin {
 		return true
+	}
+	switch a.Role {
+	case policy.RoleTeamLead, policy.RoleUser:
+	default:
+		return false
 	}
 	if a.TeamID == nil || fileTeamID == nil {
 		return false

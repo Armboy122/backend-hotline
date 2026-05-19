@@ -8,56 +8,65 @@ type Meta = internaldto.Meta
 type Count = internaldto.Count
 
 type CreateTaskRequest struct {
-	WorkDate    string   `json:"workDate" binding:"required"`
-	TeamID      int64    `json:"teamId" binding:"required"`
-	JobTypeID   int64    `json:"jobTypeId" binding:"required"`
-	JobDetailID int64    `json:"jobDetailId" binding:"required"`
-	FeederID    *int64   `json:"feederId"`
-	NumPole     *string  `json:"numPole"`
-	DeviceCode  *string  `json:"deviceCode"`
-	Detail      *string  `json:"detail"`
-	URLsBefore  []string `json:"urlsBefore"`
-	URLsAfter   []string `json:"urlsAfter"`
-	Latitude    *float64 `json:"latitude"`
-	Longitude   *float64 `json:"longitude"`
+	WorkDate        string   `json:"workDate" binding:"required"`
+	TeamID          int64    `json:"teamId" binding:"required"`
+	JobTypeID       int64    `json:"jobTypeId" binding:"required"`
+	JobDetailID     int64    `json:"jobDetailId" binding:"required"`
+	FeederID        *int64   `json:"feederId"`
+	NumPole         *string  `json:"numPole"`
+	DeviceCode      *string  `json:"deviceCode"`
+	Detail          *string  `json:"detail"`
+	URLsBefore      []string `json:"urlsBefore"`
+	URLsAfter       []string `json:"urlsAfter"`
+	Latitude        *float64 `json:"latitude"`
+	Longitude       *float64 `json:"longitude"`
+	SourceType      *string  `json:"sourceType"`
+	SourceID        *int64   `json:"sourceId"`
+	LargeWorkTaskID *int64   `json:"largeWorkTaskId"`
 }
 
 type UpdateTaskRequest struct {
-	WorkDate    *string  `json:"workDate"`
-	TeamID      *int64   `json:"teamId"`
-	JobTypeID   *int64   `json:"jobTypeId"`
-	JobDetailID *int64   `json:"jobDetailId"`
-	FeederID    *int64   `json:"feederId"`
-	NumPole     *string  `json:"numPole"`
-	DeviceCode  *string  `json:"deviceCode"`
-	Detail      *string  `json:"detail"`
-	URLsBefore  []string `json:"urlsBefore"`
-	URLsAfter   []string `json:"urlsAfter"`
-	Latitude    *float64 `json:"latitude"`
-	Longitude   *float64 `json:"longitude"`
+	WorkDate        *string  `json:"workDate"`
+	TeamID          *int64   `json:"teamId"`
+	JobTypeID       *int64   `json:"jobTypeId"`
+	JobDetailID     *int64   `json:"jobDetailId"`
+	FeederID        *int64   `json:"feederId"`
+	NumPole         *string  `json:"numPole"`
+	DeviceCode      *string  `json:"deviceCode"`
+	Detail          *string  `json:"detail"`
+	URLsBefore      []string `json:"urlsBefore"`
+	URLsAfter       []string `json:"urlsAfter"`
+	Latitude        *float64 `json:"latitude"`
+	Longitude       *float64 `json:"longitude"`
+	SourceType      *string  `json:"sourceType"`
+	SourceID        *int64   `json:"sourceId"`
+	LargeWorkTaskID *int64   `json:"largeWorkTaskId"`
 }
 
 type TaskResponse struct {
-	ID          int64                `json:"id"`
-	WorkDate    string               `json:"workDate"`
-	TeamID      int64                `json:"teamId"`
-	JobTypeID   int64                `json:"jobTypeId"`
-	JobDetailID int64                `json:"jobDetailId"`
-	FeederID    *int64               `json:"feederId"`
-	NumPole     *string              `json:"numPole"`
-	DeviceCode  *string              `json:"deviceCode"`
-	Detail      *string              `json:"detail"`
-	URLsBefore  []string             `json:"urlsBefore"`
-	URLsAfter   []string             `json:"urlsAfter"`
-	Latitude    *float64             `json:"latitude"`
-	Longitude   *float64             `json:"longitude"`
-	Team        *TeamNested          `json:"team,omitempty"`
-	JobType     *JobTypeNested       `json:"jobType,omitempty"`
-	JobDetail   *JobDetailNested     `json:"jobDetail,omitempty"`
-	Feeder      *FeederNestedForTask `json:"feeder,omitempty"`
-	CreatedAt   string               `json:"createdAt"`
-	UpdatedAt   string               `json:"updatedAt"`
-	DeletedAt   *string              `json:"deletedAt"`
+	ID              int64                `json:"id"`
+	WorkDate        string               `json:"workDate"`
+	TeamID          int64                `json:"teamId"`
+	JobTypeID       int64                `json:"jobTypeId"`
+	JobDetailID     int64                `json:"jobDetailId"`
+	FeederID        *int64               `json:"feederId"`
+	NumPole         *string              `json:"numPole"`
+	DeviceCode      *string              `json:"deviceCode"`
+	Detail          *string              `json:"detail"`
+	URLsBefore      []string             `json:"urlsBefore"`
+	URLsAfter       []string             `json:"urlsAfter"`
+	Latitude        *float64             `json:"latitude"`
+	Longitude       *float64             `json:"longitude"`
+	SourceType      *string              `json:"sourceType,omitempty"`
+	SourceID        *int64               `json:"sourceId,omitempty"`
+	LargeWorkTaskID *int64               `json:"largeWorkTaskId,omitempty"`
+	Team            *TeamNested          `json:"team,omitempty"`
+	JobType         *JobTypeNested       `json:"jobType,omitempty"`
+	JobDetail       *JobDetailNested     `json:"jobDetail,omitempty"`
+	Feeder          *FeederNestedForTask `json:"feeder,omitempty"`
+	CreatedAt       string               `json:"createdAt"`
+	UpdatedAt       string               `json:"updatedAt"`
+	DeletedAt       *string              `json:"deletedAt"`
 }
 
 type TeamNested struct {

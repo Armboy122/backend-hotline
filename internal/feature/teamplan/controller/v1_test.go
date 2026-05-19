@@ -154,21 +154,21 @@ func TestCreateUpdateGetAndDeleteMapAuthAndDomainErrors(t *testing.T) {
 }
 
 type fakeTeamPlanService struct {
-	listResult  *service.ListOutput
-	listErr     error
-	getResult   *entity.TeamPlan
-	getErr      error
+	listResult   *service.ListOutput
+	listErr      error
+	getResult    *entity.TeamPlan
+	getErr       error
 	createResult *entity.TeamPlan
-	createErr   error
+	createErr    error
 	updateResult *entity.TeamPlan
-	updateErr   error
-	deleteErr   error
-	listInput   service.ListInput
-	getID       int64
-	createActor entity.Actor
-	createInput service.CreateInput
-	updateInput service.UpdateInput
-	deleteID    int64
+	updateErr    error
+	deleteErr    error
+	listInput    service.ListInput
+	getID        int64
+	createActor  entity.Actor
+	createInput  service.CreateInput
+	updateInput  service.UpdateInput
+	deleteID     int64
 }
 
 func (f *fakeTeamPlanService) List(_ context.Context, _ entity.Actor, input service.ListInput) (*service.ListOutput, error) {
@@ -209,4 +209,3 @@ func withActor(userID uint, role string, teamID *int64) gin.HandlerFunc {
 }
 
 func int64Ptr(v int64) *int64 { return &v }
-

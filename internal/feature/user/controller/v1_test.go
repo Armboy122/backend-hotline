@@ -17,7 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestCreateForbidsAdminCreatingAdmin(t *testing.T) {
+func TestCreateForbidsLegacyAdminCreatingUser(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &controllerFakeRepo{activeSuperAdmins: 1}
 	r := gin.New()
@@ -25,7 +25,7 @@ func TestCreateForbidsAdminCreatingAdmin(t *testing.T) {
 	r.POST("/users", withActor(10, policy.RoleAdmin), ctrl.Create)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewBufferString(`{"username":"123456","password":"secret1","role":"admin"}`))
+	req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewBufferString(`{"username":"123456","password":"secret1","role":"user"}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(rec, req)
 
@@ -34,6 +34,26 @@ func TestCreateForbidsAdminCreatingAdmin(t *testing.T) {
 	}
 	if repo.created.Role != "" {
 		t.Fatalf("repository create should not be called, got role %q", repo.created.Role)
+	}
+}
+
+func TestCreateRejectsLegacyAdminRolePayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &controllerFakeRepo{activeSuperAdmins: 1}
+	r := gin.New()
+	ctrl := NewController(service.NewService(repo))
+	r.POST("/users", withActor(1, policy.RoleSuperAdmin), ctrl.Create)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewBufferString(`{"username":"123456","password":"secret1","role":"admin"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s, want 400", rec.Code, rec.Body.String())
+	}
+	if repo.created.Role != "" {
+		t.Fatalf("repository create should not be called for invalid role, got role %q", repo.created.Role)
 	}
 }
 

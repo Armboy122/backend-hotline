@@ -58,18 +58,21 @@ func (r *repository) GetByID(ctx context.Context, query GetQuery) (*entity.Task,
 func (r *repository) Create(ctx context.Context, input CreateInput) (*entity.Task, error) {
 	now := time.Now()
 	task := models.TaskDaily{
-		WorkDate:    input.WorkDate,
-		TeamID:      input.TeamID,
-		JobTypeID:   input.JobTypeID,
-		JobDetailID: input.JobDetailID,
-		FeederID:    input.FeederID,
-		NumPole:     input.NumPole,
-		DeviceCode:  input.DeviceCode,
-		Detail:      input.Detail,
-		URLsBefore:  models.StringArray(input.URLsBefore),
-		URLsAfter:   models.StringArray(input.URLsAfter),
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		WorkDate:        input.WorkDate,
+		TeamID:          input.TeamID,
+		JobTypeID:       input.JobTypeID,
+		JobDetailID:     input.JobDetailID,
+		FeederID:        input.FeederID,
+		NumPole:         input.NumPole,
+		DeviceCode:      input.DeviceCode,
+		Detail:          input.Detail,
+		URLsBefore:      models.StringArray(input.URLsBefore),
+		URLsAfter:       models.StringArray(input.URLsAfter),
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		SourceType:      input.SourceType,
+		SourceID:        input.SourceID,
+		LargeWorkTaskID: input.LargeWorkTaskID,
 	}
 	if input.Latitude != nil && input.Longitude != nil {
 		lat := decimal.NewFromFloat(*input.Latitude)
@@ -126,6 +129,15 @@ func (r *repository) Update(ctx context.Context, input UpdateInput) (*entity.Tas
 	if input.Latitude != nil && input.Longitude != nil {
 		updates["latitude"] = decimal.NewFromFloat(*input.Latitude)
 		updates["longitude"] = decimal.NewFromFloat(*input.Longitude)
+	}
+	if input.SourceType != nil {
+		updates["source_type"] = *input.SourceType
+	}
+	if input.SourceID != nil {
+		updates["source_id"] = *input.SourceID
+	}
+	if input.LargeWorkTaskID != nil {
+		updates["large_work_task_id"] = *input.LargeWorkTaskID
 	}
 	updates["updatedat"] = time.Now()
 

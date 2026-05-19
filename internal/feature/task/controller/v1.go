@@ -207,18 +207,21 @@ func (c *controller) Create(ctx *gin.Context) {
 	}
 
 	task, err := c.service.Create(ctx.Request.Context(), actor, taskservice.CreateTaskInput{
-		WorkDate:    workDate,
-		TeamID:      req.TeamID,
-		JobTypeID:   req.JobTypeID,
-		JobDetailID: req.JobDetailID,
-		FeederID:    req.FeederID,
-		NumPole:     req.NumPole,
-		DeviceCode:  req.DeviceCode,
-		Detail:      req.Detail,
-		URLsBefore:  req.URLsBefore,
-		URLsAfter:   req.URLsAfter,
-		Latitude:    req.Latitude,
-		Longitude:   req.Longitude,
+		WorkDate:        workDate,
+		TeamID:          req.TeamID,
+		JobTypeID:       req.JobTypeID,
+		JobDetailID:     req.JobDetailID,
+		FeederID:        req.FeederID,
+		NumPole:         req.NumPole,
+		DeviceCode:      req.DeviceCode,
+		Detail:          req.Detail,
+		URLsBefore:      req.URLsBefore,
+		URLsAfter:       req.URLsAfter,
+		Latitude:        req.Latitude,
+		Longitude:       req.Longitude,
+		SourceType:      req.SourceType,
+		SourceID:        req.SourceID,
+		LargeWorkTaskID: req.LargeWorkTaskID,
 	})
 	if err != nil {
 		if isValidationError(err) {
@@ -270,15 +273,18 @@ func (c *controller) Update(ctx *gin.Context) {
 	}
 
 	input := taskservice.UpdateTaskInput{
-		ID:         id,
-		FeederID:   req.FeederID,
-		NumPole:    req.NumPole,
-		DeviceCode: req.DeviceCode,
-		Detail:     req.Detail,
-		URLsBefore: req.URLsBefore,
-		URLsAfter:  req.URLsAfter,
-		Latitude:   req.Latitude,
-		Longitude:  req.Longitude,
+		ID:              id,
+		FeederID:        req.FeederID,
+		NumPole:         req.NumPole,
+		DeviceCode:      req.DeviceCode,
+		Detail:          req.Detail,
+		URLsBefore:      req.URLsBefore,
+		URLsAfter:       req.URLsAfter,
+		Latitude:        req.Latitude,
+		Longitude:       req.Longitude,
+		SourceType:      req.SourceType,
+		SourceID:        req.SourceID,
+		LargeWorkTaskID: req.LargeWorkTaskID,
 	}
 	if req.WorkDate != nil {
 		wd, err := time.Parse("2006-01-02", *req.WorkDate)

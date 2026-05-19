@@ -37,26 +37,18 @@ func TestActorPolicyForTeamPlanActions(t *testing.T) {
 			wantDelete: true,
 		},
 		{
-			name:       "user can create own team only",
+			name:       "user can create and delete own team like team lead",
 			actor:      Actor{UserID: 3, Role: policy.RoleUser, TeamID: &ownTeamID},
 			teamID:     ownTeamID,
 			plan:       TeamPlan{TeamID: ownTeamID, CreatedByUserID: 3, Status: StatusPlanned},
 			wantCreate: true,
-			wantDelete: false,
-		},
-		{
-			name:       "admin can create and delete own team plan",
-			actor:      Actor{UserID: 4, Role: policy.RoleAdmin, TeamID: &ownTeamID},
-			teamID:     ownTeamID,
-			plan:       TeamPlan{TeamID: ownTeamID, CreatedByUserID: creatorID, Status: StatusPlanned},
-			wantCreate: true,
 			wantDelete: true,
 		},
 		{
-			name:       "admin cannot create or delete another team plan",
+			name:       "legacy admin cannot create or delete team plan",
 			actor:      Actor{UserID: 4, Role: policy.RoleAdmin, TeamID: &ownTeamID},
-			teamID:     otherTeamID,
-			plan:       TeamPlan{TeamID: otherTeamID, CreatedByUserID: creatorID, Status: StatusPlanned},
+			teamID:     ownTeamID,
+			plan:       TeamPlan{TeamID: ownTeamID, CreatedByUserID: creatorID, Status: StatusPlanned},
 			wantCreate: false,
 			wantDelete: false,
 		},
@@ -91,7 +83,6 @@ func TestActorPolicyForTeamPlanUpdates(t *testing.T) {
 	teamLead := Actor{UserID: 2, Role: policy.RoleTeamLead, TeamID: &teamID}
 	user := Actor{UserID: creatorID, Role: policy.RoleUser, TeamID: &teamID}
 	superAdmin := Actor{UserID: 1, Role: policy.RoleSuperAdmin}
-	admin := Actor{UserID: 4, Role: policy.RoleAdmin, TeamID: &teamID}
 
 	editable := TeamPlan{ID: 10, TeamID: teamID, CreatedByUserID: creatorID, Status: StatusPlanned}
 	completed := TeamPlan{ID: 11, TeamID: teamID, CreatedByUserID: creatorID, Status: StatusCompleted}
@@ -106,24 +97,18 @@ func TestActorPolicyForTeamPlanUpdates(t *testing.T) {
 	if user.CanUpdateTeamPlan(otherTeam) {
 		t.Fatalf("user should not update other team's item")
 	}
-	if user.CanUpdateTeamPlan(completed) {
-		t.Fatalf("user should not update completed item")
-	}
 	if !user.CanUpdateTeamPlan(editable) {
-		t.Fatalf("user should update their own planned item")
+		t.Fatalf("user should update own-team item")
 	}
-	if !admin.CanUpdateTeamPlan(editable) {
-		t.Fatalf("admin should update own team plan")
-	}
-	if admin.CanUpdateTeamPlan(otherTeam) {
-		t.Fatalf("admin should not update another team's plan")
+	if !user.CanUpdateTeamPlan(completed) {
+		t.Fatalf("user should update own-team completed item by team scope")
 	}
 }
 
 func TestTeamPlanExpandedDates(t *testing.T) {
 	start := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
-	plan := TeamPlan{StartDate: start, EndDate: &end}
+	plan := TeamPlan{StartDate: &start, EndDate: &end}
 
 	dates := plan.ExpandedDates()
 	if len(dates) != 3 {

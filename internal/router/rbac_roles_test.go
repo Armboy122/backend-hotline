@@ -103,7 +103,7 @@ func TestSuperAdminOnlyRoleGateAllowsOnlySuperAdmin(t *testing.T) {
 	}
 }
 
-func TestMonthlyPlanManagerRoleGateAllowsAdminAndSuperAdmin(t *testing.T) {
+func TestMonthlyPlanManagerRoleGateAllowsOnlySuperAdmin(t *testing.T) {
 	jwtManager := jwt.NewJWTManager("secret", time.Hour, 24*time.Hour)
 	authMw := middleware.NewAuthMiddleware(jwtManager)
 
@@ -111,7 +111,7 @@ func TestMonthlyPlanManagerRoleGateAllowsAdminAndSuperAdmin(t *testing.T) {
 		role     string
 		wantCode int
 	}{
-		{role: policy.RoleAdmin, wantCode: http.StatusNoContent},
+		{role: policy.RoleAdmin, wantCode: http.StatusForbidden},
 		{role: policy.RoleSuperAdmin, wantCode: http.StatusNoContent},
 		{role: policy.RoleUser, wantCode: http.StatusForbidden},
 		{role: policy.RoleViewer, wantCode: http.StatusForbidden},

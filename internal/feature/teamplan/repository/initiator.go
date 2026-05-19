@@ -30,7 +30,7 @@ type CreateInput struct {
 	CreatedByUserID   int64
 	Title             string
 	WorkType          *string
-	StartDate         time.Time
+	StartDate         *time.Time
 	EndDate           *time.Time
 	WorkTime          *string
 	LocationText      string
@@ -179,7 +179,7 @@ func (r *repository) Create(ctx context.Context, input CreateInput) (*entity.Tea
 		CreatedByUserID:   input.CreatedByUserID,
 		Title:             input.Title,
 		WorkType:          input.WorkType,
-		StartDate:         dateOnly(input.StartDate),
+		StartDate:         dateOnlyPtr(input.StartDate),
 		EndDate:           input.EndDate,
 		WorkTime:          input.WorkTime,
 		LocationText:      input.LocationText,
@@ -220,7 +220,7 @@ func (r *repository) Update(ctx context.Context, input UpdateInput) (*entity.Tea
 		model.WorkType = input.WorkType
 	}
 	if input.StartDate != nil {
-		model.StartDate = dateOnly(*input.StartDate)
+		model.StartDate = dateOnlyPtr(input.StartDate)
 	}
 	if input.EndDate != nil {
 		end := dateOnly(*input.EndDate)
@@ -269,6 +269,9 @@ func (r *repository) SoftDelete(ctx context.Context, cmd DeleteCommand) error {
 }
 
 func applyListFilters(db *gorm.DB, query ListQuery) *gorm.DB {
+	if !query.To.IsZero() || !query.From.IsZero() {
+		db = db.Where("start_date IS NOT NULL")
+	}
 	if !query.To.IsZero() {
 		db = db.Where("start_date <= ?", dateOnly(query.To))
 	}
@@ -291,7 +294,7 @@ func toEntity(model models.TeamPlan) entity.TeamPlan {
 		CreatedByUserID:   model.CreatedByUserID,
 		Title:             model.Title,
 		WorkType:          model.WorkType,
-		StartDate:         dateOnly(model.StartDate),
+		StartDate:         dateOnlyPtr(model.StartDate),
 		EndDate:           model.EndDate,
 		WorkTime:          model.WorkTime,
 		LocationText:      model.LocationText,
@@ -336,4 +339,12 @@ func dateOnly(t time.Time) time.Time {
 		return time.Time{}
 	}
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func dateOnlyPtr(t *time.Time) *time.Time {
+	if t == nil || t.IsZero() {
+		return nil
+	}
+	out := dateOnly(*t)
+	return &out
 }

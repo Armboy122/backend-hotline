@@ -107,21 +107,21 @@ func TestListSourcesUsesOwnTeamScopeAndMergesTeamAndMonthlySources(t *testing.T)
 	teamID := int64(7)
 	participantTeamID := int64(8)
 	workDate := time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC)
-	teamRepo := &fakeTeamPlanRepo{listResult: []teamplanentity.TeamPlan{{ID: 101, TeamID: teamID, Title: "Patrol feeder A", StartDate: workDate, LocationText: "Bang Khen", Notes: testStringPtr("prepare notice"), Team: &teamplanentity.TeamSummary{ID: teamID, Name: "Ops East"}}}}
+	teamRepo := &fakeTeamPlanRepo{listResult: []teamplanentity.TeamPlan{{ID: 101, TeamID: teamID, Title: "Patrol feeder A", StartDate: ptrTime(workDate), LocationText: "Bang Khen", Notes: testStringPtr("prepare notice"), Team: &teamplanentity.TeamSummary{ID: teamID, Name: "Ops East"}}}}
 	monthlyRepo := &fakeMonthlyRepo{
 		periodResult: &monthlyentity.Entity{ID: 88, Year: 2026, Month: 6},
 		filesResult:  []monthlyentity.PlanFileEntity{{ID: 202, MonthlyPlanID: 88, TeamID: &teamID, Description: testStringPtr("Monthly outage"), Destination: testStringPtr("Substation 9"), Remarks: testStringPtr("approved offline"), WorkStartDate: &workDate, TeamName: testStringPtr("Ops East")}},
 	}
 	largeRepo := &fakeLargeWorkRepo{listItems: []largeworkentity.LargeWorkItem{{
-		ID:              303,
-		OwnerTeamID:     teamID,
-		Title:           "Big outage support",
-		WorkType:        testStringPtr("large work"),
-		StartDate:       workDate,
-		EndDate:         &workDate,
-		LocationText:    "Substation 9",
-		Status:          largeworkentity.LargeWorkStatusPlanned,
-		Teams: []largeworkentity.LargeWorkTeam{{ID: teamID, Name: "Ops East", Role: largeworkentity.LargeWorkTeamRoleOwner, ParticipantStatus: largeworkentity.LargeWorkParticipantStatusAssigned}, {ID: participantTeamID, Name: "Ops West", Role: largeworkentity.LargeWorkTeamRoleParticipant, ParticipantStatus: largeworkentity.LargeWorkParticipantStatusAcknowledged}},
+		ID:           303,
+		OwnerTeamID:  teamID,
+		Title:        "Big outage support",
+		WorkType:     testStringPtr("large work"),
+		StartDate:    workDate,
+		EndDate:      &workDate,
+		LocationText: "Substation 9",
+		Status:       largeworkentity.LargeWorkStatusPlanned,
+		Teams:        []largeworkentity.LargeWorkTeam{{ID: teamID, Name: "Ops East", Role: largeworkentity.LargeWorkTeamRoleOwner, ParticipantStatus: largeworkentity.LargeWorkParticipantStatusAssigned}, {ID: participantTeamID, Name: "Ops West", Role: largeworkentity.LargeWorkTeamRoleParticipant, ParticipantStatus: largeworkentity.LargeWorkParticipantStatusAcknowledged}},
 	}}}
 	svc := NewService(teamRepo, monthlyRepo, largeRepo)
 	actor := taskActor(teamID, "user")
@@ -168,7 +168,7 @@ func TestFromPlanPrefillTeamPlanMapsSelectedDateTeamFeederAndDetail(t *testing.T
 		TeamID:          teamID,
 		CreatedByUserID: 42,
 		Title:           "Patrol feeder A",
-		StartDate:       time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
+		StartDate:       ptrTime(time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)),
 		LocationText:    "Bang Khen",
 		FeederID:        &feederID,
 		Notes:           testStringPtr("carry spares"),
@@ -250,15 +250,15 @@ func TestFromPlanPrefillMonthlyPlanUsesSelectedDateAndDestination(t *testing.T) 
 func TestFromPlanRejectsForbiddenAndUnsupportedSources(t *testing.T) {
 	teamID := int64(7)
 	otherTeamID := int64(8)
-	teamRepo := &fakeTeamPlanRepo{getByIDResult: &teamplanentity.TeamPlan{ID: 101, TeamID: otherTeamID, Title: "Other team", StartDate: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC), LocationText: "X"}}
+	teamRepo := &fakeTeamPlanRepo{getByIDResult: &teamplanentity.TeamPlan{ID: 101, TeamID: otherTeamID, Title: "Other team", StartDate: ptrTime(time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)), LocationText: "X"}}
 	largeRepo := &fakeLargeWorkRepo{item: &largeworkentity.LargeWorkItem{
-		ID:            303,
-		OwnerTeamID:   teamID,
-		Title:         "Big outage support",
-		StartDate:     time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
-		LocationText:  "Depot",
-		Status:        largeworkentity.LargeWorkStatusPlanned,
-		Teams:         []largeworkentity.LargeWorkTeam{{ID: teamID, Name: "Ops East", Role: largeworkentity.LargeWorkTeamRoleOwner, ParticipantStatus: largeworkentity.LargeWorkParticipantStatusAssigned}},
+		ID:           303,
+		OwnerTeamID:  teamID,
+		Title:        "Big outage support",
+		StartDate:    time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
+		LocationText: "Depot",
+		Status:       largeworkentity.LargeWorkStatusPlanned,
+		Teams:        []largeworkentity.LargeWorkTeam{{ID: teamID, Name: "Ops East", Role: largeworkentity.LargeWorkTeamRoleOwner, ParticipantStatus: largeworkentity.LargeWorkParticipantStatusAssigned}},
 	}}
 	svc := NewService(teamRepo, &fakeMonthlyRepo{}, largeRepo)
 	actor := taskActor(teamID, "user")
@@ -295,5 +295,7 @@ func findSourceCandidate(items []SourceCandidate, sourceType string) *SourceCand
 	}
 	return nil
 }
+
+func ptrTime(t time.Time) *time.Time { return &t }
 
 func testStringPtr(v string) *string { s := v; return &s }

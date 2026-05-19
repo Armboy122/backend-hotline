@@ -251,6 +251,7 @@ func (Team) TableName() string {
 }
 
 const (
+	TeamPlanStatusDraft     = "draft"
 	TeamPlanStatusPlanned   = "planned"
 	TeamPlanStatusCancelled = "cancelled"
 	TeamPlanStatusCompleted = "completed"
@@ -282,7 +283,7 @@ type TeamPlan struct {
 	CreatedByUserID   int64      `gorm:"not null;column:created_by_user_id;index:idx_team_plans_created_by" json:"createdByUserId"`
 	Title             string     `gorm:"not null;column:title" json:"title"`
 	WorkType          *string    `gorm:"column:work_type" json:"workType,omitempty"`
-	StartDate         time.Time  `gorm:"not null;type:date;column:start_date;index:idx_team_plans_team_start_date,priority:2;index:idx_team_plans_date_range,priority:1" json:"startDate"`
+	StartDate         *time.Time `gorm:"type:date;column:start_date;index:idx_team_plans_team_start_date,priority:2;index:idx_team_plans_date_range,priority:1" json:"startDate,omitempty"`
 	EndDate           *time.Time `gorm:"type:date;column:end_date;index:idx_team_plans_date_range,priority:2" json:"endDate,omitempty"`
 	WorkTime          *string    `gorm:"column:work_time" json:"workTime,omitempty"`
 	LocationText      string     `gorm:"not null;column:location_text" json:"locationText"`
@@ -402,27 +403,31 @@ func (LargeWorkTask) TableName() string {
 
 // TaskDaily - รายงานประจำวัน
 type TaskDaily struct {
-	ID          int64            `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
-	WorkDate    time.Time        `gorm:"not null;type:date;column:workdate;index:TaskDaily_workdate_idx" json:"workDate"`
-	JobTypeID   int64            `gorm:"not null;column:jobTypeId;index:TaskDaily_jobTypeId_jobDetailId_idx" json:"jobTypeId"`
-	JobDetailID int64            `gorm:"not null;column:jobDetailId;index:TaskDaily_jobTypeId_jobDetailId_idx" json:"jobDetailId"`
-	FeederID    *int64           `gorm:"column:feederId;index:TaskDaily_feederId_idx" json:"feederId"`
-	NumPole     *string          `gorm:"column:numPole" json:"numPole,omitempty"`
-	DeviceCode  *string          `gorm:"column:deviceCode" json:"deviceCode,omitempty"`
-	URLsBefore  StringArray      `gorm:"type:text[];column:urlsBefore" json:"urlsBefore"`
-	URLsAfter   StringArray      `gorm:"type:text[];column:urlsAfter" json:"urlsAfter"`
-	CreatedAt   time.Time        `gorm:"not null;type:timestamptz(6);column:createdat;default:CURRENT_TIMESTAMP" json:"createdAt"`
-	UpdatedAt   time.Time        `gorm:"not null;type:timestamptz(6);column:updatedat" json:"updatedAt"`
-	DeletedAt   *time.Time       `gorm:"type:timestamptz(6);column:deletedat" json:"deletedAt,omitempty"`
-	Detail      *string          `gorm:"column:detail" json:"detail,omitempty"`
-	TeamID      int64            `gorm:"not null;column:teamId" json:"teamId"`
-	Latitude    *decimal.Decimal `gorm:"type:decimal(9,6);column:latitude;index:TaskDaily_latitude_longitude_idx" json:"latitude,omitempty"`
-	Longitude   *decimal.Decimal `gorm:"type:decimal(9,6);column:longitude;index:TaskDaily_latitude_longitude_idx" json:"longitude,omitempty"`
+	ID              int64            `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	WorkDate        time.Time        `gorm:"not null;type:date;column:workdate;index:TaskDaily_workdate_idx" json:"workDate"`
+	JobTypeID       int64            `gorm:"not null;column:jobTypeId;index:TaskDaily_jobTypeId_jobDetailId_idx" json:"jobTypeId"`
+	JobDetailID     int64            `gorm:"not null;column:jobDetailId;index:TaskDaily_jobTypeId_jobDetailId_idx" json:"jobDetailId"`
+	FeederID        *int64           `gorm:"column:feederId;index:TaskDaily_feederId_idx" json:"feederId"`
+	NumPole         *string          `gorm:"column:numPole" json:"numPole,omitempty"`
+	DeviceCode      *string          `gorm:"column:deviceCode" json:"deviceCode,omitempty"`
+	URLsBefore      StringArray      `gorm:"type:text[];column:urlsBefore" json:"urlsBefore"`
+	URLsAfter       StringArray      `gorm:"type:text[];column:urlsAfter" json:"urlsAfter"`
+	CreatedAt       time.Time        `gorm:"not null;type:timestamptz(6);column:createdat;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt       time.Time        `gorm:"not null;type:timestamptz(6);column:updatedat" json:"updatedAt"`
+	DeletedAt       *time.Time       `gorm:"type:timestamptz(6);column:deletedat" json:"deletedAt,omitempty"`
+	Detail          *string          `gorm:"column:detail" json:"detail,omitempty"`
+	TeamID          int64            `gorm:"not null;column:teamId" json:"teamId"`
+	Latitude        *decimal.Decimal `gorm:"type:decimal(9,6);column:latitude;index:TaskDaily_latitude_longitude_idx" json:"latitude,omitempty"`
+	Longitude       *decimal.Decimal `gorm:"type:decimal(9,6);column:longitude;index:TaskDaily_latitude_longitude_idx" json:"longitude,omitempty"`
+	SourceType      *string          `gorm:"column:source_type;index" json:"sourceType,omitempty"`
+	SourceID        *int64           `gorm:"column:source_id;index" json:"sourceId,omitempty"`
+	LargeWorkTaskID *int64           `gorm:"column:large_work_task_id;uniqueIndex:taskdaily_large_work_task_unique_idx" json:"largeWorkTaskId,omitempty"`
 
-	Team      *Team      `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
-	JobType   *JobType   `gorm:"foreignKey:JobTypeID;references:ID" json:"jobType,omitempty"`
-	JobDetail *JobDetail `gorm:"foreignKey:JobDetailID;references:ID" json:"jobDetail,omitempty"`
-	Feeder    *Feeder    `gorm:"foreignKey:FeederID;references:ID" json:"feeder,omitempty"`
+	Team          *Team          `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
+	JobType       *JobType       `gorm:"foreignKey:JobTypeID;references:ID" json:"jobType,omitempty"`
+	JobDetail     *JobDetail     `gorm:"foreignKey:JobDetailID;references:ID" json:"jobDetail,omitempty"`
+	Feeder        *Feeder        `gorm:"foreignKey:FeederID;references:ID" json:"feeder,omitempty"`
+	LargeWorkTask *LargeWorkTask `gorm:"foreignKey:LargeWorkTaskID;references:ID" json:"largeWorkTask,omitempty"`
 }
 
 // TableName กำหนดชื่อตารางใน database
@@ -446,12 +451,30 @@ type User struct {
 	UpdatedAt   time.Time  `gorm:"not null;type:timestamptz(6);column:updatedAt" json:"updatedAt"`
 	DeletedAt   *time.Time `gorm:"type:timestamptz(6);column:deletedAt" json:"deletedAt,omitempty"`
 
-	Team *Team `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
+	Team         *Team            `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
+	Capabilities []UserCapability `gorm:"foreignKey:UserID;references:ID" json:"capabilities,omitempty"`
 }
 
 // TableName กำหนดชื่อตารางใน database
 func (User) TableName() string {
 	return "User"
+}
+
+// UserCapability stores per-user feature capabilities granted by super_admin.
+type UserCapability struct {
+	ID              int64      `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	UserID          uint       `gorm:"not null;column:user_id;index:idx_user_capabilities_user_code,priority:1" json:"userId"`
+	Code            string     `gorm:"not null;column:code;index:idx_user_capabilities_user_code,priority:2" json:"code"`
+	GrantedByUserID *uint      `gorm:"column:granted_by_user_id" json:"grantedByUserId,omitempty"`
+	CreatedAt       time.Time  `gorm:"not null;type:timestamptz(6);column:created_at;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	RevokedAt       *time.Time `gorm:"type:timestamptz(6);column:revoked_at;index" json:"revokedAt,omitempty"`
+
+	User      *User `gorm:"foreignKey:UserID;references:ID" json:"user,omitempty"`
+	GrantedBy *User `gorm:"foreignKey:GrantedByUserID;references:ID" json:"grantedBy,omitempty"`
+}
+
+func (UserCapability) TableName() string {
+	return "user_capabilities"
 }
 
 // MonthlyPlan - แผนลงทะเบียนงานประจำเดือน

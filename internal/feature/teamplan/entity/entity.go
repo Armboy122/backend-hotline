@@ -12,18 +12,20 @@ var (
 	ErrNotFound      = errors.New("team plan not found")
 	ErrInvalidID     = errors.New("invalid team plan ID")
 	ErrForbidden     = errors.New("forbidden")
-	ErrInvalidInput   = errors.New("invalid team plan input")
-	ErrInvalidStatus  = errors.New("invalid team plan status")
-	ErrInvalidRange   = errors.New("invalid team plan date range")
+	ErrInvalidInput  = errors.New("invalid team plan input")
+	ErrInvalidStatus = errors.New("invalid team plan status")
+	ErrInvalidRange  = errors.New("invalid team plan date range")
 )
 
 const (
+	StatusDraft     = "draft"
 	StatusPlanned   = "planned"
 	StatusCancelled = "cancelled"
 	StatusCompleted = "completed"
 )
 
 var allowedStatuses = map[string]struct{}{
+	StatusDraft:     {},
 	StatusPlanned:   {},
 	StatusCancelled: {},
 	StatusCompleted: {},
@@ -52,7 +54,7 @@ type TeamPlan struct {
 	CreatedByUserID   int64
 	Title             string
 	WorkType          *string
-	StartDate         time.Time
+	StartDate         *time.Time
 	EndDate           *time.Time
 	WorkTime          *string
 	LocationText      string
@@ -78,7 +80,7 @@ func (a Actor) CanCreateTeamPlan(teamID int64) bool {
 		return false
 	}
 	switch a.Role {
-	case policy.RoleAdmin, policy.RoleTeamLead, policy.RoleUser:
+	case policy.RoleTeamLead, policy.RoleUser:
 		return *a.TeamID == teamID
 	default:
 		return false
@@ -93,10 +95,8 @@ func (a Actor) CanUpdateTeamPlan(plan TeamPlan) bool {
 		return false
 	}
 	switch a.Role {
-	case policy.RoleAdmin, policy.RoleTeamLead:
+	case policy.RoleTeamLead, policy.RoleUser:
 		return true
-	case policy.RoleUser:
-		return plan.CreatedByUserID == a.UserID && plan.Status == StatusPlanned
 	default:
 		return false
 	}
@@ -110,7 +110,7 @@ func (a Actor) CanDeleteTeamPlan(plan TeamPlan) bool {
 		return false
 	}
 	switch a.Role {
-	case policy.RoleAdmin, policy.RoleTeamLead:
+	case policy.RoleTeamLead, policy.RoleUser:
 		return true
 	default:
 		return false
@@ -118,7 +118,10 @@ func (a Actor) CanDeleteTeamPlan(plan TeamPlan) bool {
 }
 
 func (p TeamPlan) ExpandedDates() []time.Time {
-	start := dateOnly(p.StartDate)
+	if p.StartDate == nil || p.StartDate.IsZero() {
+		return nil
+	}
+	start := dateOnly(*p.StartDate)
 	end := start
 	if p.EndDate != nil && !p.EndDate.IsZero() {
 		end = dateOnly(*p.EndDate)

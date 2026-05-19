@@ -35,7 +35,7 @@ type CreateInput struct {
 	TeamID            int64
 	Title             string
 	WorkType          *string
-	StartDate         time.Time
+	StartDate         *time.Time
 	EndDate           *time.Time
 	WorkTime          *string
 	LocationText      string
@@ -72,13 +72,19 @@ func NewService(repo repository.Repository) *Service {
 }
 
 func (s *Service) List(ctx context.Context, actor entity.Actor, input ListInput) (*ListOutput, error) {
-	if input.From.IsZero() || input.To.IsZero() {
+	hasFrom := !input.From.IsZero()
+	hasTo := !input.To.IsZero()
+	if hasFrom != hasTo {
 		return nil, entity.ErrInvalidRange
 	}
-	from := dateOnly(input.From)
-	to := dateOnly(input.To)
-	if to.Before(from) {
-		return nil, entity.ErrInvalidRange
+	var from time.Time
+	var to time.Time
+	if hasFrom {
+		from = dateOnly(input.From)
+		to = dateOnly(input.To)
+		if to.Before(from) {
+			return nil, entity.ErrInvalidRange
+		}
 	}
 	teamID, err := scopedListTeamID(actor, input.TeamID)
 	if err != nil {
@@ -118,10 +124,13 @@ func (s *Service) GetByID(ctx context.Context, actor entity.Actor, id int64) (*e
 }
 
 func (s *Service) Create(ctx context.Context, actor entity.Actor, input CreateInput) (*entity.TeamPlan, error) {
-	if input.TeamID <= 0 || strings.TrimSpace(input.Title) == "" || strings.TrimSpace(input.LocationText) == "" || input.StartDate.IsZero() {
+	if input.TeamID <= 0 || strings.TrimSpace(input.Title) == "" || strings.TrimSpace(input.LocationText) == "" {
 		return nil, entity.ErrInvalidInput
 	}
-	if input.EndDate != nil && dateOnly(*input.EndDate).Before(dateOnly(input.StartDate)) {
+	if input.EndDate != nil && input.StartDate == nil {
+		return nil, entity.ErrInvalidRange
+	}
+	if input.StartDate != nil && input.EndDate != nil && dateOnly(*input.EndDate).Before(dateOnly(*input.StartDate)) {
 		return nil, entity.ErrInvalidRange
 	}
 	if !actor.CanCreateTeamPlan(input.TeamID) {
@@ -132,7 +141,7 @@ func (s *Service) Create(ctx context.Context, actor entity.Actor, input CreateIn
 		CreatedByUserID:   actor.UserID,
 		Title:             strings.TrimSpace(input.Title),
 		WorkType:          input.WorkType,
-		StartDate:         dateOnly(input.StartDate),
+		StartDate:         dateOnlyPtr(input.StartDate),
 		EndDate:           input.EndDate,
 		WorkTime:          input.WorkTime,
 		LocationText:      strings.TrimSpace(input.LocationText),
@@ -141,7 +150,7 @@ func (s *Service) Create(ctx context.Context, actor entity.Actor, input CreateIn
 		FeederID:          input.FeederID,
 		StationID:         input.StationID,
 		Notes:             input.Notes,
-		Status:            entity.StatusPlanned,
+		Status:            initialStatusForStartDate(input.StartDate),
 	})
 	if err != nil {
 		return nil, err
@@ -174,13 +183,19 @@ func (s *Service) Update(ctx context.Context, actor entity.Actor, input UpdateIn
 	}
 	mergedStartDate := existing.StartDate
 	if input.StartDate != nil {
-		mergedStartDate = *input.StartDate
+		mergedStartDate = dateOnlyPtr(input.StartDate)
 	}
 	mergedEndDate := existing.EndDate
 	if input.EndDate != nil {
 		mergedEndDate = input.EndDate
 	}
-	if mergedEndDate != nil && dateOnly(*mergedEndDate).Before(dateOnly(mergedStartDate)) {
+	if mergedEndDate != nil && mergedStartDate == nil {
+		return nil, entity.ErrInvalidRange
+	}
+	if mergedStartDate != nil && mergedEndDate != nil && dateOnly(*mergedEndDate).Before(dateOnly(*mergedStartDate)) {
+		return nil, entity.ErrInvalidRange
+	}
+	if input.Status != nil && strings.TrimSpace(*input.Status) == entity.StatusPlanned && mergedStartDate == nil {
 		return nil, entity.ErrInvalidRange
 	}
 	updated, err := s.repo.Update(ctx, repository.UpdateInput{
@@ -233,11 +248,26 @@ func canViewTeamPlan(actor entity.Actor, plan entity.TeamPlan) bool {
 		return false
 	}
 	switch actor.Role {
-	case policy.RoleAdmin, policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
+	case policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
 		return true
 	default:
 		return false
 	}
+}
+
+func initialStatusForStartDate(start *time.Time) string {
+	if start == nil || start.IsZero() {
+		return entity.StatusDraft
+	}
+	return entity.StatusPlanned
+}
+
+func dateOnlyPtr(t *time.Time) *time.Time {
+	if t == nil || t.IsZero() {
+		return nil
+	}
+	out := dateOnly(*t)
+	return &out
 }
 
 func scopedListTeamID(actor entity.Actor, requested *int64) (*int64, error) {
@@ -248,7 +278,7 @@ func scopedListTeamID(actor entity.Actor, requested *int64) (*int64, error) {
 		return nil, entity.ErrForbidden
 	}
 	switch actor.Role {
-	case policy.RoleAdmin, policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
+	case policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
 		if requested != nil && *requested != *actor.TeamID {
 			return nil, entity.ErrForbidden
 		}

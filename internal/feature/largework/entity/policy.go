@@ -17,7 +17,7 @@ func (a Actor) CanCreateLargeWork(ownerTeamID *int64) bool {
 	if a.TeamID == nil || ownerTeamID == nil || *a.TeamID != *ownerTeamID {
 		return false
 	}
-	return a.Role == policy.RoleAdmin || a.Role == policy.RoleTeamLead
+	return a.Role == policy.RoleTeamLead
 }
 
 func (a Actor) CanUpdateLargeWork(item *LargeWorkItem) bool {
@@ -48,7 +48,7 @@ func (a Actor) canManageEditableLargeWork(item *LargeWorkItem) bool {
 	if a.TeamID == nil || *a.TeamID != item.OwnerTeamID {
 		return false
 	}
-	return a.Role == policy.RoleAdmin || a.Role == policy.RoleTeamLead
+	return a.Role == policy.RoleTeamLead
 }
 
 func IsLargeWorkEditableStatus(status string) bool {
@@ -57,7 +57,7 @@ func IsLargeWorkEditableStatus(status string) bool {
 
 func (a Actor) CanViewLargeWorkOverview() bool {
 	switch a.Role {
-	case policy.RoleSuperAdmin, policy.RoleAdmin, policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
+	case policy.RoleSuperAdmin, policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
 		return true
 	default:
 		return false
@@ -70,6 +70,11 @@ func (a Actor) CanViewLargeWork(item *LargeWorkItem) bool {
 	}
 	if a.IsPrivileged() {
 		return true
+	}
+	switch a.Role {
+	case policy.RoleTeamLead, policy.RoleUser, policy.RoleViewer:
+	default:
+		return false
 	}
 	if a.TeamID == nil {
 		return false

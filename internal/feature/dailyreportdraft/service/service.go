@@ -162,9 +162,9 @@ func (s *Service) ListSources(ctx context.Context, actor taskentity.Actor, input
 
 	if s.largeWorks != nil {
 		largeWorks, _, err := s.largeWorks.List(ctx, largeworkrepository.ListQuery{
-			From:    &dayStart,
-			To:      &dayEnd,
-			TeamID:  teamID,
+			From:     &dayStart,
+			To:       &dayEnd,
+			TeamID:   teamID,
 			Statuses: []string{largeworkentity.LargeWorkStatusPlanned, largeworkentity.LargeWorkStatusInProgress, largeworkentity.LargeWorkStatusCompleted},
 		})
 		if err != nil {
@@ -219,7 +219,10 @@ func (s *Service) fromTeamPlan(ctx context.Context, actor taskentity.Actor, inpu
 	}
 	workDate := input.WorkDate
 	if workDate == nil || workDate.IsZero() {
-		workDate = &plan.StartDate
+		workDate = plan.StartDate
+	}
+	if workDate == nil || workDate.IsZero() {
+		return nil, ErrWorkDateRequired
 	}
 	prefill := Prefill{
 		WorkDate:    dateOnly(*workDate).Format("2006-01-02"),
