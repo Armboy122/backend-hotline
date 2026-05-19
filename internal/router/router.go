@@ -54,6 +54,9 @@ import (
 	usercontroller "backend-hotlines3/internal/feature/user/controller"
 	userrepository "backend-hotlines3/internal/feature/user/repository"
 	userservice "backend-hotlines3/internal/feature/user/service"
+	workreportcontroller "backend-hotlines3/internal/feature/workreport/controller"
+	workreportrepository "backend-hotlines3/internal/feature/workreport/repository"
+	workreportservice "backend-hotlines3/internal/feature/workreport/service"
 	"backend-hotlines3/internal/middleware"
 	"backend-hotlines3/pkg/jwt"
 	"backend-hotlines3/pkg/s3"
@@ -220,6 +223,16 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 			tasksV1.POST("", handler.Create)
 			tasksV1.PUT("/:id", handler.Update)
 			tasksV1.DELETE("/:id", handler.Delete)
+		}
+
+		// Work reports — read-only monthly aggregation over TaskDaily.
+		{
+			workReportRepo := workreportrepository.NewRepository(db)
+			workReportSvc := workreportservice.NewService(workReportRepo)
+			workReportCtrl := workreportcontroller.NewController(workReportSvc)
+			workReportsV1 := apiV1.Group("/work-reports")
+			workReportsV1.Use(authMw.RequireAuth())
+			workReportsV1.GET("", middleware.CachePrivate(), workReportCtrl.GetReport)
 		}
 
 		// Daily-report draft / prefill — authenticated and team-scoped.

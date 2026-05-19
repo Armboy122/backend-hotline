@@ -192,6 +192,30 @@ Current active board `hotline-performance-rbac-2026` remains focused on:
 
 This discovery should not interrupt HP1 while performance work is running. It should feed a later PRD/implementation board after current stabilization.
 
+## Rollout Gate / Ready-to-Start Definition
+
+Implementation of the planning-calendar direction is blocked until all three of these are complete and verified:
+
+1. Performance stabilization is merged and smoke-tested.
+2. RBAC stabilization is merged and the role matrix is confirmed.
+3. Monthly-plan stabilization is merged, including the yearly view and upload/download permission corrections.
+
+"Ready to start" means the above work is not only discussed but actually verified in the current baseline, with no open blocker that would change scope, permissions, or data shape.
+
+Prerequisites to verify before implementation:
+
+- Performance baseline is acceptable on the main flow.
+- RBAC rules are final for the active roles and UI/API guards match.
+- Monthly-plan behavior is stable enough that the planning-calendar work can reuse it without rework.
+- The PRD discovery scope is frozen enough to avoid changing the data model mid-build.
+
+First discovery step when the user is ready:
+
+1. Confirm whether the first MVP slice is calendar visibility only, or calendar + team plan/monthly plan creation.
+2. Freeze the scope boundaries for team plan vs monthly plan.
+3. Confirm the minimum fields needed for the first implementation pass.
+4. Only then start implementation planning.
+
 ## Confirmed Decisions — 2026-05-09
 
 - Inside own responsible area → use `team plan`.

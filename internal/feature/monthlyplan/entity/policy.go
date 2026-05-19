@@ -44,6 +44,12 @@ func (a Actor) CanUploadForTeam(teamID *int64) bool {
 	return *a.TeamID == *teamID
 }
 
+// CanDownloadFile checks if actor can download a monthly plan file.
+// Viewer role is always blocked from downloading per Requirement A.
+func (a Actor) CanDownloadFile() bool {
+	return a.Role != policy.RoleViewer
+}
+
 // CanAccessFile checks if actor can access a non-master-plan file.
 // Super admin can access any file; others can only access files from their team.
 func (a Actor) CanAccessFile(fileTeamID *int64) bool {

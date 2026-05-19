@@ -435,6 +435,11 @@ func (c *Controller) GetDownloadURL(ctx *gin.Context) {
 		return
 	}
 
+	if !actor.CanDownloadFile() {
+		ctx.JSON(http.StatusForbidden, dto.StandardResponse{Success: false, Error: errResp("FORBIDDEN", "Viewers cannot download files")})
+		return
+	}
+
 	file, err := c.service.GetFile(ctx.Request.Context(), actor, id)
 	if err != nil {
 		ctx.JSON(mapMPError(err), dto.StandardResponse{Success: false, Error: errResp("ERROR", err.Error())})

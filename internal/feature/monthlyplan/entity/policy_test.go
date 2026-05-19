@@ -56,6 +56,30 @@ func TestMonthlyPlanUploadPolicyAllowsTeamSubmittersOnlyForOwnTeam(t *testing.T)
 	}
 }
 
+func TestViewerCannotDownloadMonthlyPlanFiles(t *testing.T) {
+	teamID := int64(7)
+
+	tests := []struct {
+		name  string
+		actor Actor
+		want  bool
+	}{
+		{name: "super admin can download", actor: Actor{Role: policy.RoleSuperAdmin}, want: true},
+		{name: "admin can download", actor: Actor{Role: policy.RoleAdmin}, want: true},
+		{name: "team lead can download", actor: Actor{Role: policy.RoleTeamLead, TeamID: &teamID}, want: true},
+		{name: "user can download", actor: Actor{Role: policy.RoleUser, TeamID: &teamID}, want: true},
+		{name: "viewer cannot download", actor: Actor{Role: policy.RoleViewer, TeamID: &teamID}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.actor.CanDownloadFile(); got != tt.want {
+				t.Fatalf("CanDownloadFile() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSuperAdminCanBypassMonthlyPlanLockEvenWhenAdminOverrideDisabled(t *testing.T) {
 	if !((Actor{Role: policy.RoleSuperAdmin}).CanUploadAfterLock(false)) {
 		t.Fatalf("expected super_admin to bypass lock regardless of admin override setting")
