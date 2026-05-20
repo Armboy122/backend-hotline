@@ -9,6 +9,7 @@ import (
 	"backend-hotlines3/internal/feature/auth/policy"
 	"backend-hotlines3/internal/feature/user/dto"
 	"backend-hotlines3/internal/feature/user/entity"
+	"backend-hotlines3/pkg/password"
 )
 
 func TestAdminCannotCreateAnyUser(t *testing.T) {
@@ -100,6 +101,68 @@ func TestOnlySuperAdminCanResetPasswordsForOthers(t *testing.T) {
 	}
 }
 
+func TestCreateUsesServerDefaultPasswordAndRequiresFirstLoginChange(t *testing.T) {
+	ctx := context.Background()
+	repo := &fakeRepo{}
+	svc := NewService(repo)
+
+	_, err := svc.Create(ctx, entity.Actor{ID: 1, Role: policy.RoleSuperAdmin}, dto.CreateUserRequest{
+		Username: "456789",
+		Password: "client-supplied-ignored",
+		Role:     policy.RoleUser,
+		TeamID:   ptrInt64(2),
+	})
+	if err != nil {
+		t.Fatalf("Create user: %v", err)
+	}
+	if !repo.created.MustChangePassword {
+		t.Fatalf("created user MustChangePassword = false, want true")
+	}
+	if repo.created.HashedPassword == "" || strings.Contains(repo.created.HashedPassword, "client-supplied-ignored") {
+		t.Fatalf("create should store a hash that does not contain client supplied password, got %q", repo.created.HashedPassword)
+	}
+	if !repo.createdPasswordMatchesDefault {
+		t.Fatalf("create should hash the server-owned default password")
+	}
+}
+
+func TestChangePasswordClearsMustChangePasswordFlag(t *testing.T) {
+	ctx := context.Background()
+	repo := &fakeRepo{}
+	svc := NewService(repo)
+
+	err := svc.ChangePassword(ctx, 7, dto.ChangePasswordRequest{OldPassword: "oldsecret", NewPassword: "newsecret"})
+	if err != nil {
+		t.Fatalf("ChangePassword: %v", err)
+	}
+	if repo.updatedPasswordID != 7 || repo.updatedPasswordHash == "" {
+		t.Fatalf("password update not captured: id=%d hash=%q", repo.updatedPasswordID, repo.updatedPasswordHash)
+	}
+	if repo.updatedMustChangePassword == nil || *repo.updatedMustChangePassword {
+		t.Fatalf("change password should clear must-change flag, got %#v", repo.updatedMustChangePassword)
+	}
+}
+
+func TestResetPasswordUsesServerDefaultAndSetsMustChangePassword(t *testing.T) {
+	ctx := context.Background()
+	repo := &fakeRepo{users: map[uint]entity.UserInfo{2: {ID: 2, Role: policy.RoleUser, IsActive: true}}}
+	svc := NewService(repo)
+
+	err := svc.ResetPassword(ctx, entity.Actor{ID: 1, Role: policy.RoleSuperAdmin}, 2, dto.ResetPasswordRequest{})
+	if err != nil {
+		t.Fatalf("ResetPassword: %v", err)
+	}
+	if repo.updatedPasswordID != 2 || repo.updatedPasswordHash == "" {
+		t.Fatalf("reset did not update password hash: id=%d hash=%q", repo.updatedPasswordID, repo.updatedPasswordHash)
+	}
+	if !repo.updatedPasswordMatchesDefault {
+		t.Fatalf("reset password should hash the server-owned default password")
+	}
+	if repo.updatedMustChangePassword == nil || !*repo.updatedMustChangePassword {
+		t.Fatalf("reset should set must-change flag true, got %#v", repo.updatedMustChangePassword)
+	}
+}
+
 func TestDeleteForbidsAdminDeletingAdminAndOnlySuperAdmin(t *testing.T) {
 	ctx := context.Background()
 	repo := &fakeRepo{activeSuperAdmins: 0, users: map[uint]entity.UserInfo{
@@ -186,16 +249,20 @@ func TestUpdateContactForbidsUserUpdatingAnotherUser(t *testing.T) {
 func ptrInt64(v int64) *int64 { return &v }
 
 type fakeRepo struct {
-	users                map[uint]entity.UserInfo
-	activeSuperAdmins    int64
-	created              entity.CreateInput
-	updated              entity.UpdateInput
-	capturedContactQuery entity.ContactListQuery
-	updatedContactID     uint
-	updatedContact       entity.UpdateContactInput
-	deletedID            uint
-	updatedPasswordID    uint
-	updatedPasswordHash  string
+	users                         map[uint]entity.UserInfo
+	activeSuperAdmins             int64
+	created                       entity.CreateInput
+	updated                       entity.UpdateInput
+	capturedContactQuery          entity.ContactListQuery
+	updatedContactID              uint
+	updatedContact                entity.UpdateContactInput
+	createdExternalContact        entity.ExternalContactInput
+	deletedID                     uint
+	updatedPasswordID             uint
+	updatedPasswordHash           string
+	updatedMustChangePassword     *bool
+	createdPasswordMatchesDefault bool
+	updatedPasswordMatchesDefault bool
 }
 
 func (r *fakeRepo) List(context.Context, int, int) ([]entity.UserInfo, int64, error) {
@@ -215,7 +282,8 @@ func (r *fakeRepo) GetByID(_ context.Context, id uint) (entity.UserInfo, error) 
 
 func (r *fakeRepo) Create(_ context.Context, in entity.CreateInput) (entity.UserInfo, error) {
 	r.created = in
-	return entity.UserInfo{ID: 100, Username: in.Username, Role: in.Role, TeamID: in.TeamID, IsActive: in.IsActive}, nil
+	r.createdPasswordMatchesDefault = password.CheckPassword(adminCreatedDefaultPassword, in.HashedPassword)
+	return entity.UserInfo{ID: 100, Username: in.Username, Role: in.Role, TeamID: in.TeamID, IsActive: in.IsActive, MustChangePassword: in.MustChangePassword}, nil
 }
 
 func (r *fakeRepo) Update(_ context.Context, id uint, in entity.UpdateInput) (entity.UserInfo, error) {
@@ -245,12 +313,22 @@ func (r *fakeRepo) Delete(_ context.Context, id uint) error {
 }
 
 func (r *fakeRepo) GetPasswordHash(context.Context, uint) (string, error) {
-	return "$2a$12$BL9bVdgl.6mnHeYvuewIEeJcDObTvWNiyzxkSvjKw8aUP3XvR2lRm", nil // bcrypt for oldsecret
+	hash, err := password.HashPassword("oldsecret")
+	if err != nil {
+		return "", err
+	}
+	return hash, nil
 }
 
-func (r *fakeRepo) UpdatePassword(_ context.Context, id uint, hashed string) error {
+func (r *fakeRepo) MustChangePassword(context.Context, uint) (bool, error) {
+	return false, nil
+}
+
+func (r *fakeRepo) UpdatePassword(_ context.Context, id uint, hashed string, mustChangePassword bool) error {
 	r.updatedPasswordID = id
 	r.updatedPasswordHash = hashed
+	r.updatedMustChangePassword = &mustChangePassword
+	r.updatedPasswordMatchesDefault = password.CheckPassword(adminCreatedDefaultPassword, hashed)
 	return nil
 }
 
@@ -262,7 +340,10 @@ func (r *fakeRepo) ListContacts(_ context.Context, q entity.ContactListQuery) ([
 	r.capturedContactQuery = q
 	items := []entity.ContactInfo{}
 	for _, user := range r.users {
-		items = append(items, entity.ContactInfo{ID: user.ID, Username: user.Username, Role: user.Role, TeamID: user.TeamID, DisplayName: user.DisplayName, Position: user.Position, PhoneNumber: user.PhoneNumber, IsActive: user.IsActive})
+		items = append(items, entity.ContactInfo{ID: user.ID, Source: entity.ContactSourceUser, Type: entity.ContactTypeUser, Username: user.Username, Role: user.Role, TeamID: user.TeamID, DisplayName: user.DisplayName, Position: user.Position, PhoneNumber: user.PhoneNumber, IsActive: user.IsActive})
+	}
+	if r.createdExternalContact.DisplayName != "" {
+		items = append(items, entity.ContactInfo{ExternalID: 1, Source: entity.ContactSourceExternal, Type: r.createdExternalContact.Type, DisplayName: &r.createdExternalContact.DisplayName, PhoneNumber: &r.createdExternalContact.PhoneNumber, TeamID: r.createdExternalContact.TeamID, IsActive: true})
 	}
 	return items, int64(len(items)), nil
 }
@@ -272,6 +353,15 @@ func (r *fakeRepo) GetContactByID(_ context.Context, id uint) (entity.ContactInf
 		return entity.ContactInfo{ID: user.ID, Username: user.Username, Role: user.Role, TeamID: user.TeamID, DisplayName: user.DisplayName, Position: user.Position, PhoneNumber: user.PhoneNumber, IsActive: user.IsActive}, nil
 	}
 	return entity.ContactInfo{}, entity.ErrNotFound
+}
+
+func (r *fakeRepo) CreateExternalContact(_ context.Context, input entity.ExternalContactInput) (entity.ContactInfo, error) {
+	r.createdExternalContact = input
+	active := true
+	if input.IsActive != nil {
+		active = *input.IsActive
+	}
+	return entity.ContactInfo{ExternalID: 1, Source: entity.ContactSourceExternal, Type: input.Type, DisplayName: &input.DisplayName, PhoneNumber: &input.PhoneNumber, Organization: input.Organization, Position: input.Position, Notes: input.Notes, TeamID: input.TeamID, IsActive: active}, nil
 }
 
 func (r *fakeRepo) UpdateContact(_ context.Context, id uint, in entity.UpdateContactInput) (entity.ContactInfo, error) {

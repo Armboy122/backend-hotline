@@ -9,6 +9,7 @@ var (
 	ErrUserNotFound       = errors.New("user not found")
 	ErrInvalidToken       = errors.New("invalid or expired token")
 	ErrTeamRequired       = errors.New("teamId required for role user")
+	ErrInvalidRole        = errors.New("invalid role")
 )
 
 type Actor struct {
@@ -17,49 +18,53 @@ type Actor struct {
 }
 
 type UserInfo struct {
-	ID           uint
-	Username     string
-	Role         string
-	TeamID       *int64
-	Capabilities []string
-	IsActive     bool
-	LastLogin    *string
-	CreatedAt    string
+	ID                 uint
+	Username           string
+	Role               string
+	TeamID             *int64
+	Capabilities       []string
+	IsActive           bool
+	MustChangePassword bool
+	LastLogin          *string
+	CreatedAt          string
 }
 
 // AuthUser carries credential fields needed during login/refresh in addition to UserInfo fields.
 type AuthUser struct {
-	ID           uint
-	Username     string
-	Role         string
-	TeamID       *int64
-	Capabilities []string
-	IsActive     bool
-	LastLogin    *string
-	CreatedAt    string
-	PasswordHash string
+	ID                 uint
+	Username           string
+	Role               string
+	TeamID             *int64
+	Capabilities       []string
+	IsActive           bool
+	MustChangePassword bool
+	LastLogin          *string
+	CreatedAt          string
+	PasswordHash       string
 }
 
 func (a AuthUser) ToUserInfo() UserInfo {
 	return UserInfo{
-		ID:           a.ID,
-		Username:     a.Username,
-		Role:         a.Role,
-		TeamID:       a.TeamID,
-		Capabilities: append([]string{}, a.Capabilities...),
-		IsActive:     a.IsActive,
-		LastLogin:    a.LastLogin,
-		CreatedAt:    a.CreatedAt,
+		ID:                 a.ID,
+		Username:           a.Username,
+		Role:               a.Role,
+		TeamID:             a.TeamID,
+		Capabilities:       append([]string{}, a.Capabilities...),
+		IsActive:           a.IsActive,
+		MustChangePassword: a.MustChangePassword,
+		LastLogin:          a.LastLogin,
+		CreatedAt:          a.CreatedAt,
 	}
 }
 
 // CreateUserInput is passed from service to repository — Password field carries the hash.
 type CreateUserInput struct {
-	Username       string
-	HashedPassword string
-	Role           string
-	TeamID         *int64
-	IsActive       bool
+	Username           string
+	HashedPassword     string
+	Role               string
+	TeamID             *int64
+	IsActive           bool
+	MustChangePassword bool
 }
 
 type LoginResult struct {

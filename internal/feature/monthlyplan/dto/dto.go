@@ -21,3 +21,5 @@ type MonthlyPlanYearOverviewResponse = internaldto.MonthlyPlanYearOverviewRespon
 type MonthlyPlanSettingsResponse = internaldto.MonthlyPlanSettingsResponse
 type UpdateMonthlyPlanSettingsRequest = internaldto.UpdateMonthlyPlanSettingsRequest
 type TeamNested = internaldto.TeamNested
+type MonthlyPlanConversionRequest = internaldto.MonthlyPlanConversionRequest
+type MonthlyPlanConversionResponse = internaldto.MonthlyPlanConversionResponse

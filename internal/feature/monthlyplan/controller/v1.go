@@ -193,6 +193,51 @@ func (c *Controller) GetOrCreatePeriod(ctx *gin.Context) {
 	})
 }
 
+func (c *Controller) ConvertApprovedToPlanning(ctx *gin.Context) {
+	year, err := strconv.Atoi(ctx.Param("year"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("BAD_REQUEST", "Invalid year")})
+		return
+	}
+	month, err := strconv.Atoi(ctx.Param("month"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("BAD_REQUEST", "Invalid month")})
+		return
+	}
+	actor, ok := actorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: errResp("UNAUTHORIZED", "Unauthorized")})
+		return
+	}
+	var req dto.MonthlyPlanConversionRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("BAD_REQUEST", "Invalid request body")})
+		return
+	}
+	if req.Year != year || req.Month != month {
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("BAD_REQUEST", "Request period does not match route")})
+		return
+	}
+	result, err := c.service.ConvertApprovedToPlanning(ctx.Request.Context(), actor, service.ConvertApprovedToPlanningInput{
+		Year:            year,
+		Month:           month,
+		ApprovedFileID:  req.ApprovedFileID,
+		SelectedTeamIDs: req.SelectedTeamIDs,
+	})
+	if err != nil {
+		ctx.JSON(mapMPError(err), dto.StandardResponse{Success: false, Error: errResp("ERROR", err.Error())})
+		return
+	}
+	ctx.JSON(http.StatusOK, dto.StandardResponse{
+		Success: true,
+		Data: dto.MonthlyPlanConversionResponse{
+			PlanningItemsCreated: result.PlanningItemsCreated,
+			SourceFileID:         result.SourceFileID,
+			ConvertedAt:          result.ConvertedAt,
+		},
+	})
+}
+
 // ─── File Endpoints ────────────────────────────────────────────────────────
 
 func (c *Controller) ListFiles(ctx *gin.Context) {
@@ -536,11 +581,6 @@ func (c *Controller) GetSettings(ctx *gin.Context) {
 		Success: true,
 		Data: dto.MonthlyPlanSettingsResponse{
 			LockDay:                 settings.LockDay,
-			AutoCreateDay:           settings.AutoCreateDay,
-			AutoCreateTarget:        settings.AutoCreateTarget,
-			AllowedFileTypes:        settings.AllowedFileTypes,
-			MaxFileSizeMB:           settings.MaxFileSizeMB,
-			ReminderStartDay:        settings.ReminderStartDay,
 			AdminCanUploadAfterLock: settings.AdminCanUploadAfterLock,
 		},
 	})
@@ -561,11 +601,6 @@ func (c *Controller) UpdateSettings(ctx *gin.Context) {
 
 	settings, err := c.service.UpdateSettings(ctx.Request.Context(), actor, service.SettingsPatch{
 		LockDay:                 req.LockDay,
-		AutoCreateDay:           req.AutoCreateDay,
-		AutoCreateTarget:        req.AutoCreateTarget,
-		AllowedFileTypes:        req.AllowedFileTypes,
-		MaxFileSizeMB:           req.MaxFileSizeMB,
-		ReminderStartDay:        req.ReminderStartDay,
 		AdminCanUploadAfterLock: req.AdminCanUploadAfterLock,
 	})
 	if err != nil {
@@ -577,11 +612,6 @@ func (c *Controller) UpdateSettings(ctx *gin.Context) {
 		Success: true,
 		Data: dto.MonthlyPlanSettingsResponse{
 			LockDay:                 settings.LockDay,
-			AutoCreateDay:           settings.AutoCreateDay,
-			AutoCreateTarget:        settings.AutoCreateTarget,
-			AllowedFileTypes:        settings.AllowedFileTypes,
-			MaxFileSizeMB:           settings.MaxFileSizeMB,
-			ReminderStartDay:        settings.ReminderStartDay,
 			AdminCanUploadAfterLock: settings.AdminCanUploadAfterLock,
 		},
 	})

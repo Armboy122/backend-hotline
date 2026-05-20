@@ -12,6 +12,8 @@ import (
 	"backend-hotlines3/pkg/password"
 )
 
+const adminCreatedDefaultPassword = "123456"
+
 type Service struct {
 	repo repository.Repository
 }
@@ -28,6 +30,7 @@ func (s *Service) ListContacts(ctx context.Context, actor entity.Actor, q entity
 		q.Limit = 50
 	}
 	q.Query = strings.TrimSpace(q.Query)
+	q.Type = strings.TrimSpace(q.Type)
 	if actor.Role != policy.RoleSuperAdmin {
 		q.IncludeInactive = false
 	}
@@ -36,6 +39,38 @@ func (s *Service) ListContacts(ctx context.Context, actor entity.Actor, q entity
 		return entity.ContactListResult{}, err
 	}
 	return entity.ContactListResult{Items: items, Total: total, Page: q.Page, Limit: q.Limit}, nil
+}
+
+func (s *Service) CreateExternalContact(ctx context.Context, actor entity.Actor, input entity.ExternalContactInput) (entity.ContactInfo, error) {
+	if !canManageExternalContact(actor, input.TeamID) {
+		return entity.ContactInfo{}, entity.ErrForbidden
+	}
+	input.Type = strings.TrimSpace(input.Type)
+	input.DisplayName = strings.TrimSpace(input.DisplayName)
+	input.PhoneNumber = strings.TrimSpace(input.PhoneNumber)
+	if !isAllowedContactType(input.Type) || input.DisplayName == "" || input.PhoneNumber == "" {
+		return entity.ContactInfo{}, entity.ErrInvalidContactField
+	}
+	return s.repo.CreateExternalContact(ctx, input)
+}
+
+func canManageExternalContact(actor entity.Actor, teamID *int64) bool {
+	if actor.Role == policy.RoleSuperAdmin {
+		return true
+	}
+	if actor.Role != policy.RoleTeamLead && actor.Role != policy.RoleUser {
+		return false
+	}
+	return teamID != nil && *teamID > 0
+}
+
+func isAllowedContactType(t string) bool {
+	switch strings.TrimSpace(t) {
+	case entity.ContactTypeExternal, entity.ContactTypeEmergency, entity.ContactTypeOperationCenter:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) GetContactByID(ctx context.Context, id uint) (entity.ContactInfo, error) {
@@ -107,16 +142,17 @@ func (s *Service) Create(ctx context.Context, actor entity.Actor, req dto.Create
 	if err := s.authorizeCreate(ctx, actor, req.Role, isActive); err != nil {
 		return entity.UserInfo{}, err
 	}
-	hashed, err := password.HashPassword(req.Password)
+	hashed, err := password.HashPassword(adminCreatedDefaultPassword)
 	if err != nil {
 		return entity.UserInfo{}, err
 	}
 	return s.repo.Create(ctx, entity.CreateInput{
-		Username:       req.Username,
-		HashedPassword: hashed,
-		Role:           req.Role,
-		TeamID:         req.TeamID,
-		IsActive:       isActive,
+		Username:           req.Username,
+		HashedPassword:     hashed,
+		Role:               req.Role,
+		TeamID:             req.TeamID,
+		IsActive:           isActive,
+		MustChangePassword: true,
 	})
 }
 
@@ -180,10 +216,10 @@ func (s *Service) ChangePassword(ctx context.Context, id uint, req dto.ChangePas
 	if err != nil {
 		return err
 	}
-	return s.repo.UpdatePassword(ctx, id, newHash)
+	return s.repo.UpdatePassword(ctx, id, newHash, false)
 }
 
-func (s *Service) ResetPassword(ctx context.Context, actor entity.Actor, id uint, req dto.ResetPasswordRequest) error {
+func (s *Service) ResetPassword(ctx context.Context, actor entity.Actor, id uint, _ dto.ResetPasswordRequest) error {
 	if id == 0 {
 		return entity.ErrInvalidID
 	}
@@ -193,11 +229,11 @@ func (s *Service) ResetPassword(ctx context.Context, actor entity.Actor, id uint
 	if _, err := s.repo.GetByID(ctx, id); err != nil {
 		return err
 	}
-	newHash, err := password.HashPassword(req.NewPassword)
+	newHash, err := password.HashPassword(adminCreatedDefaultPassword)
 	if err != nil {
 		return err
 	}
-	return s.repo.UpdatePassword(ctx, id, newHash)
+	return s.repo.UpdatePassword(ctx, id, newHash, true)
 }
 
 func (s *Service) authorizeCreate(ctx context.Context, actor entity.Actor, targetRole string, targetActive bool) error {

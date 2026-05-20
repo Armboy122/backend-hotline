@@ -309,18 +309,19 @@ type RefreshResponse struct {
 }
 
 type UserResponse struct {
-	ID          uint        `json:"id"`
-	Username    string      `json:"username"`
-	Role        string      `json:"role"`
-	TeamID      *int64      `json:"teamId,omitempty"`
-	Team        *TeamNested `json:"team,omitempty"`
-	Capabilities []string    `json:"capabilities,omitempty"`
-	DisplayName *string     `json:"displayName,omitempty"`
-	Position    *string     `json:"position,omitempty"`
-	PhoneNumber *string     `json:"phoneNumber,omitempty"`
-	IsActive    bool        `json:"isActive"`
-	LastLogin   *string     `json:"lastLogin,omitempty"`
-	CreatedAt   string      `json:"createdAt"`
+	ID                 uint        `json:"id"`
+	Username           string      `json:"username"`
+	Role               string      `json:"role"`
+	TeamID             *int64      `json:"teamId,omitempty"`
+	Team               *TeamNested `json:"team,omitempty"`
+	Capabilities       []string    `json:"capabilities,omitempty"`
+	DisplayName        *string     `json:"displayName,omitempty"`
+	Position           *string     `json:"position,omitempty"`
+	PhoneNumber        *string     `json:"phoneNumber,omitempty"`
+	IsActive           bool        `json:"isActive"`
+	MustChangePassword bool        `json:"mustChangePassword"`
+	LastLogin          *string     `json:"lastLogin,omitempty"`
+	CreatedAt          string      `json:"createdAt"`
 }
 
 type ContactDirectoryActions struct {
@@ -344,7 +345,7 @@ type ContactDirectoryResponse struct {
 
 type CreateUserRequest struct {
 	Username string `json:"username" binding:"required,len=6,numeric"`
-	Password string `json:"password" binding:"required,min=6"`
+	Password string `json:"password" binding:"omitempty,min=6"`
 	Role     string `json:"role" binding:"required,oneof=super_admin team_lead user viewer"`
 	TeamID   *int64 `json:"teamId"`
 	IsActive *bool  `json:"isActive"`
@@ -369,7 +370,7 @@ type ChangePasswordRequest struct {
 }
 
 type ResetPasswordRequest struct {
-	NewPassword string `json:"newPassword" binding:"required,min=6"`
+	NewPassword string `json:"newPassword" binding:"omitempty,min=6"`
 }
 
 // === Monthly Plan DTOs ===
@@ -437,6 +438,19 @@ type ConfirmPlanFileRequest struct {
 	TeamID *int64 `json:"teamId"`
 }
 
+type MonthlyPlanConversionRequest struct {
+	Year            int     `json:"year" binding:"required"`
+	Month           int     `json:"month" binding:"required"`
+	ApprovedFileID  int64   `json:"approvedFileId" binding:"required,min=1"`
+	SelectedTeamIDs []int64 `json:"selectedTeamIds" binding:"required,min=1"`
+}
+
+type MonthlyPlanConversionResponse struct {
+	PlanningItemsCreated int    `json:"planningItemsCreated"`
+	SourceFileID         int64  `json:"sourceFileId"`
+	ConvertedAt          string `json:"convertedAt"`
+}
+
 // TeamSubmissionStatus — สถานะการส่งของแต่ละทีม
 type TeamSubmissionStatus struct {
 	Team      TeamNested `json:"team"`
@@ -473,24 +487,15 @@ type MonthlyPlanYearOverviewResponse struct {
 	Months []MonthlyPlanOverviewMonthResponse `json:"months"`
 }
 
-// MonthlyPlanSettingsResponse — response สำหรับ GET settings
+// MonthlyPlanSettingsResponse — response สำหรับ round-1 Admin settings
+// Round 1 exposes only Monthly Plan lock day and whether privileged upload after lock is allowed.
 type MonthlyPlanSettingsResponse struct {
-	LockDay                 int      `json:"lockDay"`
-	AutoCreateDay           int      `json:"autoCreateDay"`
-	AutoCreateTarget        string   `json:"autoCreateTarget"`
-	AllowedFileTypes        []string `json:"allowedFileTypes"`
-	MaxFileSizeMB           *int     `json:"maxFileSizeMB"`
-	ReminderStartDay        int      `json:"reminderStartDay"`
-	AdminCanUploadAfterLock bool     `json:"adminCanUploadAfterLock"`
+	LockDay                 int  `json:"lockDay"`
+	AdminCanUploadAfterLock bool `json:"adminCanUploadAfterLock"`
 }
 
-// UpdateMonthlyPlanSettingsRequest — request สำหรับ PUT settings
+// UpdateMonthlyPlanSettingsRequest — request สำหรับ round-1 Admin settings
 type UpdateMonthlyPlanSettingsRequest struct {
-	LockDay                 *int     `json:"lockDay"`
-	AutoCreateDay           *int     `json:"autoCreateDay"`
-	AutoCreateTarget        *string  `json:"autoCreateTarget"`
-	AllowedFileTypes        []string `json:"allowedFileTypes"`
-	MaxFileSizeMB           *int     `json:"maxFileSizeMB"`
-	ReminderStartDay        *int     `json:"reminderStartDay"`
-	AdminCanUploadAfterLock *bool    `json:"adminCanUploadAfterLock"`
+	LockDay                 *int  `json:"lockDay"`
+	AdminCanUploadAfterLock *bool `json:"adminCanUploadAfterLock"`
 }

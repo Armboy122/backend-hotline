@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"backend-hotlines3/internal/feature/auth/entity"
+	"backend-hotlines3/internal/feature/auth/policy"
 	"backend-hotlines3/internal/feature/auth/repository"
 	"backend-hotlines3/pkg/jwt"
 	"backend-hotlines3/pkg/password"
@@ -16,11 +17,16 @@ type Service struct {
 	jwtManager *jwt.JWTManager
 }
 
+const adminCreatedDefaultPassword = "123456"
+
 func NewService(repo repository.Repository, jwtManager *jwt.JWTManager) *Service {
 	return &Service{repo: repo, jwtManager: jwtManager}
 }
 
 func (s *Service) Register(ctx context.Context, req entity.RegisterInput) (entity.UserInfo, error) {
+	if !policy.IsValidRole(req.Role) {
+		return entity.UserInfo{}, entity.ErrInvalidRole
+	}
 	existing, err := s.repo.FindByUsername(ctx, req.Username)
 	if err == nil && existing != nil {
 		return entity.UserInfo{}, entity.ErrUserExists
@@ -29,7 +35,7 @@ func (s *Service) Register(ctx context.Context, req entity.RegisterInput) (entit
 		return entity.UserInfo{}, entity.ErrTeamRequired
 	}
 
-	hashed, err := password.HashPassword(req.Password)
+	hashed, err := password.HashPassword(adminCreatedDefaultPassword)
 	if err != nil {
 		return entity.UserInfo{}, err
 	}
@@ -40,11 +46,12 @@ func (s *Service) Register(ctx context.Context, req entity.RegisterInput) (entit
 	}
 
 	return s.repo.Create(ctx, entity.CreateUserInput{
-		Username:       req.Username,
-		HashedPassword: hashed,
-		Role:           req.Role,
-		TeamID:         req.TeamID,
-		IsActive:       isActive,
+		Username:           req.Username,
+		HashedPassword:     hashed,
+		Role:               req.Role,
+		TeamID:             req.TeamID,
+		IsActive:           isActive,
+		MustChangePassword: true,
 	})
 }
 

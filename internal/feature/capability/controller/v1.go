@@ -63,6 +63,12 @@ func writeError(ctx *gin.Context, err error) {
 		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("INVALID_ID", "invalid user id")})
 	case errors.Is(err, entity.ErrInvalidCapability):
 		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("INVALID_CAPABILITY", "invalid capability")})
+	case errors.Is(err, entity.ErrTargetUserNotFound):
+		ctx.JSON(http.StatusNotFound, dto.StandardResponse{Success: false, Error: errResp("TARGET_USER_NOT_FOUND", "target user not found")})
+	case errors.Is(err, entity.ErrInactiveTargetUser):
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("INACTIVE_TARGET_USER", "target user is inactive")})
+	case errors.Is(err, entity.ErrViewerTargetForbidden):
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("VIEWER_TARGET_FORBIDDEN", "viewer cannot receive capabilities")})
 	default:
 		ctx.JSON(http.StatusInternalServerError, dto.StandardResponse{Success: false, Error: errResp("INTERNAL_ERROR", "capability operation failed")})
 	}

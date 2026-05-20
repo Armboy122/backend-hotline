@@ -435,6 +435,28 @@ func (TaskDaily) TableName() string {
 	return "TaskDaily"
 }
 
+// ExternalContact stores non-user directory entries such as contractors, emergency numbers, and operation centers.
+type ExternalContact struct {
+	ID           int64      `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	Type         string     `gorm:"not null;column:type;index:idx_external_contacts_type" json:"type"`
+	DisplayName  string     `gorm:"not null;column:display_name" json:"displayName"`
+	PhoneNumber  string     `gorm:"not null;column:phone_number" json:"phoneNumber"`
+	Organization *string    `gorm:"column:organization" json:"organization,omitempty"`
+	Position     *string    `gorm:"column:position" json:"position,omitempty"`
+	Notes        *string    `gorm:"column:notes" json:"notes,omitempty"`
+	TeamID       *int64     `gorm:"column:team_id;index:idx_external_contacts_team" json:"teamId,omitempty"`
+	IsActive     bool       `gorm:"not null;default:true;column:is_active" json:"isActive"`
+	CreatedAt    time.Time  `gorm:"not null;type:timestamptz(6);column:created_at;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt    time.Time  `gorm:"not null;type:timestamptz(6);column:updated_at" json:"updatedAt"`
+	DeletedAt    *time.Time `gorm:"type:timestamptz(6);column:deleted_at" json:"deletedAt,omitempty"`
+
+	Team *Team `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
+}
+
+func (ExternalContact) TableName() string {
+	return "external_contacts"
+}
+
 // User - ผู้ใช้งานระบบ
 type User struct {
 	ID          uint       `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
@@ -446,6 +468,7 @@ type User struct {
 	Position    *string    `gorm:"column:position" json:"position,omitempty"`
 	PhoneNumber *string    `gorm:"column:phoneNumber" json:"phoneNumber,omitempty"`
 	IsActive    bool       `gorm:"not null;default:true;column:isActive" json:"isActive"`
+	MustChangePassword bool `gorm:"not null;default:false;column:must_change_password" json:"mustChangePassword"`
 	LastLogin   *time.Time `gorm:"column:lastLogin" json:"lastLogin,omitempty"`
 	CreatedAt   time.Time  `gorm:"not null;type:timestamptz(6);column:createdAt;default:CURRENT_TIMESTAMP" json:"createdAt"`
 	UpdatedAt   time.Time  `gorm:"not null;type:timestamptz(6);column:updatedAt" json:"updatedAt"`

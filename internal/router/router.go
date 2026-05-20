@@ -103,6 +103,11 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 	{
 		// Auth middleware
 		authMw := middleware.NewAuthMiddleware(jwtManager)
+		var uRepo userrepository.Repository
+		if db != nil {
+			uRepo = userrepository.NewRepository(db)
+			authMw.SetPasswordStatusStore(uRepo)
+		}
 		capabilityRepo := capabilityrepository.NewRepository(db)
 		capabilitySvc := capabilityservice.NewService(capabilityRepo)
 		capabilityCtrl := capabilitycontroller.NewController(capabilitySvc)
@@ -376,6 +381,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 				monthlyPlansV1.GET("/:year/:month/files", middleware.CachePrivate(60), monthlyPlanController.ListFiles)
 				monthlyPlansV1.GET("/:year/:month/status", middleware.CachePrivate(60), monthlyPlanController.GetSubmissionStatus)
 
+				// Approved/monthly-plan conversion into planning projection
+				monthlyPlansV1.POST("/:year/:month/convert-to-planning", monthlyPlanController.ConvertApprovedToPlanning)
+
 				// Upload flow (presign + confirm)
 				monthlyPlansV1.POST("/:year/:month/files/presign", monthlyPlanController.PresignUpload)
 				monthlyPlansV1.POST("/:year/:month/files", monthlyPlanController.ConfirmUpload)
@@ -403,7 +411,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 		// Users — no cache (admin-only + user-specific context)
 		usersV1 := apiV1.Group("/users")
 		{
-			uRepo := userrepository.NewRepository(db)
+			if uRepo == nil {
+				uRepo = userrepository.NewRepository(db)
+			}
 			uSvc := userservice.NewService(uRepo)
 			uCtrl := usercontroller.NewController(uSvc)
 			// Apply authentication middleware to all user routes

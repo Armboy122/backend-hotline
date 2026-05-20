@@ -10,14 +10,17 @@ import (
 )
 
 type fakeCapabilityRepo struct {
-	listUserID     uint
-	listCodes      []string
-	listErr        error
-	replaceUserID  uint
-	replaceCodes   []string
-	replaceGranted *uint
-	replaceCalls   int
-	replaceErr     error
+	listUserID      uint
+	listCodes       []string
+	listErr         error
+	replaceUserID   uint
+	replaceCodes    []string
+	replaceGranted  *uint
+	replaceCalls    int
+	replaceErr      error
+	targetUser      *entity.TargetUser
+	targetErr       error
+	targetLookupID  uint
 }
 
 func (f *fakeCapabilityRepo) ListCodesByUserID(_ context.Context, userID uint) ([]string, error) {
@@ -34,6 +37,14 @@ func (f *fakeCapabilityRepo) ReplaceCodes(_ context.Context, userID uint, codes 
 		f.replaceGranted = &value
 	}
 	return f.replaceErr
+}
+
+func (f *fakeCapabilityRepo) GetTargetUser(_ context.Context, userID uint) (*entity.TargetUser, error) {
+	f.targetLookupID = userID
+	if f.targetUser == nil && f.targetErr == nil {
+		return &entity.TargetUser{ID: userID, Role: "user", IsActive: true}, nil
+	}
+	return f.targetUser, f.targetErr
 }
 
 func TestPRDCapabilityCatalogContainsOnlyRoundOneCapability(t *testing.T) {
@@ -89,5 +100,45 @@ func TestCapabilityUserIDValidation(t *testing.T) {
 	}
 	if _, err := svc.ReplaceForUser(context.Background(), 10, 0, nil); !errors.Is(err, entity.ErrInvalidUserID) {
 		t.Fatalf("ReplaceForUser user 0 got %v, want ErrInvalidUserID", err)
+	}
+}
+
+func TestReplaceForUserValidatesTargetExistsActiveAndNonViewerBeforeWrite(t *testing.T) {
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name       string
+		targetUser *entity.TargetUser
+		targetErr  error
+		wantErr    error
+	}{
+		{name: "missing user", targetErr: entity.ErrTargetUserNotFound, wantErr: entity.ErrTargetUserNotFound},
+		{name: "inactive user", targetUser: &entity.TargetUser{ID: 7, Role: "user", IsActive: false}, wantErr: entity.ErrInactiveTargetUser},
+		{name: "viewer user", targetUser: &entity.TargetUser{ID: 7, Role: "viewer", IsActive: true}, wantErr: entity.ErrViewerTargetForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &fakeCapabilityRepo{targetUser: tc.targetUser, targetErr: tc.targetErr}
+			svc := NewService(repo)
+
+			_, err := svc.ReplaceForUser(ctx, 10, 7, []string{entity.CanUploadApprovedMonthlyPlan})
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("got %v, want %v", err, tc.wantErr)
+			}
+			if repo.targetLookupID != 7 {
+				t.Fatalf("target lookup id = %d, want 7", repo.targetLookupID)
+			}
+			if repo.replaceCalls != 0 {
+				t.Fatalf("repository ReplaceCodes should not be called, got %d calls", repo.replaceCalls)
+			}
+		})
+	}
+
+	repo := &fakeCapabilityRepo{targetUser: &entity.TargetUser{ID: 7, Role: "team_lead", IsActive: true}}
+	svc := NewService(repo)
+	if _, err := svc.ReplaceForUser(ctx, 10, 7, []string{entity.CanUploadApprovedMonthlyPlan}); err != nil {
+		t.Fatalf("active non-viewer target should be allowed, got %v", err)
+	}
+	if repo.replaceCalls != 1 {
+		t.Fatalf("ReplaceCodes calls = %d, want 1", repo.replaceCalls)
 	}
 }

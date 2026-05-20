@@ -195,6 +195,35 @@ func TestListFilesScopesNonAdminToActorTeam(t *testing.T) {
 	}
 }
 
+func TestSoftDeleteFileRequiresMasterPlanCapabilityForApprovedFiles(t *testing.T) {
+	ctx := context.Background()
+	teamID := int64(7)
+	approved := &entity.PlanFileEntity{ID: 6001, TeamID: nil, IsMasterPlan: true}
+
+	for _, role := range []string{"viewer", "user", "team_lead"} {
+		t.Run(role, func(t *testing.T) {
+			repo := &fakeRepo{fileByID: approved}
+			svc := NewService(repo, &fakeStorage{})
+			err := svc.SoftDeleteFile(ctx, entity.Actor{UserID: 40, Role: role, TeamID: &teamID}, 6001)
+			if !errors.Is(err, entity.ErrForbiddenAction) {
+				t.Fatalf("expected %s to be forbidden from deleting approved master file, got %v", role, err)
+			}
+			if repo.softDeleteCalls != 0 {
+				t.Fatalf("forbidden actor must not soft-delete approved master file")
+			}
+		})
+	}
+
+	repo := &fakeRepo{fileByID: approved}
+	svc := NewService(repo, &fakeStorage{})
+	if err := svc.SoftDeleteFile(ctx, entity.Actor{UserID: 41, Role: "super_admin"}, 6001); err != nil {
+		t.Fatalf("super_admin should soft-delete approved master file: %v", err)
+	}
+	if repo.softDeleteCalls != 1 {
+		t.Fatalf("expected super_admin soft delete to persist once, got %d", repo.softDeleteCalls)
+	}
+}
+
 func TestCanUploadForPeriodUsesPreviousMonthLockDayAndSuperAdminOverride(t *testing.T) {
 	ctx := context.Background()
 	repo := &fakeRepo{settings: &entity.SettingsEntity{LockDay: 23, AdminCanUploadAfterLock: false}}
@@ -374,9 +403,66 @@ func TestGetYearOverviewUsesBatchedPeriodAndFileLookups(t *testing.T) {
 	}
 }
 
+func TestConvertApprovedToPlanningRequiresApprovedMasterFileAndCapability(t *testing.T) {
+	ctx := context.Background()
+	period := &entity.Entity{ID: 66, Year: 2026, Month: 6}
+	teamID := int64(7)
+	approved := &entity.PlanFileEntity{ID: 6001, MonthlyPlanID: period.ID, IsMasterPlan: true, FileName: "approved.pdf"}
+	repo := &fakeRepo{periodByID: period, fileByID: approved}
+	svc := NewService(repo, &fakeStorage{})
+	svc.clock = func() time.Time { return time.Date(2026, 5, 21, 8, 0, 0, 0, time.UTC) }
+
+	_, err := svc.ConvertApprovedToPlanning(ctx, entity.Actor{UserID: 40, Role: "viewer"}, ConvertApprovedToPlanningInput{
+		Year:            2026,
+		Month:           6,
+		ApprovedFileID:  6001,
+		SelectedTeamIDs: []int64{teamID},
+	})
+	if !errors.Is(err, entity.ErrForbiddenAction) {
+		t.Fatalf("expected viewer to be forbidden, got %v", err)
+	}
+
+	out, err := svc.ConvertApprovedToPlanning(ctx, entity.Actor{UserID: 41, Role: "team_lead", TeamID: &teamID, Capabilities: []string{"can_upload_approved_monthly_plan"}}, ConvertApprovedToPlanningInput{
+		Year:            2026,
+		Month:           6,
+		ApprovedFileID:  6001,
+		SelectedTeamIDs: []int64{teamID, 8},
+	})
+	if err != nil {
+		t.Fatalf("convert approved to planning: %v", err)
+	}
+	if out.PlanningItemsCreated != 2 || out.SourceFileID != 6001 || out.ConvertedAt != "2026-05-21T08:00:00Z" {
+		t.Fatalf("unexpected conversion response: %+v", out)
+	}
+}
+
+func TestConvertApprovedToPlanningRejectsWrongPeriodOrNonMasterFile(t *testing.T) {
+	ctx := context.Background()
+	period := &entity.Entity{ID: 66, Year: 2026, Month: 6}
+	teamID := int64(7)
+	actor := entity.Actor{UserID: 41, Role: "team_lead", TeamID: &teamID, Capabilities: []string{"can_upload_approved_monthly_plan"}}
+
+	for _, tc := range []struct {
+		name string
+		file *entity.PlanFileEntity
+	}{
+		{name: "not master", file: &entity.PlanFileEntity{ID: 6001, MonthlyPlanID: period.ID, IsMasterPlan: false}},
+		{name: "other period", file: &entity.PlanFileEntity{ID: 6001, MonthlyPlanID: 99, IsMasterPlan: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewService(&fakeRepo{periodByID: period, fileByID: tc.file}, &fakeStorage{})
+			_, err := svc.ConvertApprovedToPlanning(ctx, actor, ConvertApprovedToPlanningInput{Year: 2026, Month: 6, ApprovedFileID: 6001, SelectedTeamIDs: []int64{teamID}})
+			if !errors.Is(err, entity.ErrFileNotFound) {
+				t.Fatalf("expected file not found for invalid source, got %v", err)
+			}
+		})
+	}
+}
+
 type fakeRepo struct {
 	settings                *entity.SettingsEntity
 	periodByID              *entity.Entity
+	fileByID                *entity.PlanFileEntity
 	periodsForYear          []entity.Entity
 	filesByPlan             map[int64][]entity.PlanFileEntity
 	teams                   []repository.TeamInfo
@@ -389,6 +475,7 @@ type fakeRepo struct {
 	periodsForYearCalls     int
 	listFilesCalls          int
 	filesByPlanCalls        int
+	softDeleteCalls         int
 	operationDelay          time.Duration
 	mu                      sync.Mutex
 	starts                  map[string]time.Time
@@ -428,6 +515,9 @@ func (r *fakeRepo) GetPeriodByID(context.Context, int64) (*entity.Entity, error)
 
 func (r *fakeRepo) FindOrCreatePeriod(_ context.Context, year, month int) (*entity.Entity, error) {
 	r.findOrCreatePeriodCalls++
+	if r.periodByID != nil {
+		return r.periodByID, nil
+	}
 	return &entity.Entity{ID: 1, Year: year, Month: month}, nil
 }
 
@@ -473,7 +563,7 @@ func (r *fakeRepo) ListFilesByPlanIDs(_ context.Context, q repository.PlanFileBa
 }
 
 func (r *fakeRepo) GetFileByID(context.Context, int64) (*entity.PlanFileEntity, error) {
-	return nil, nil
+	return r.fileByID, nil
 }
 
 func (r *fakeRepo) CreateFile(_ context.Context, input repository.PlanFileCreateInput) (*entity.PlanFileEntity, error) {
@@ -494,6 +584,7 @@ func (r *fakeRepo) CreateFile(_ context.Context, input repository.PlanFileCreate
 }
 
 func (r *fakeRepo) SoftDeleteFile(context.Context, repository.PlanFileSoftDeleteInput) error {
+	r.softDeleteCalls++
 	return nil
 }
 

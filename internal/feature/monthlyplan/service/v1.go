@@ -184,6 +184,61 @@ func (s *Service) GetYearOverview(ctx context.Context, actor mpdomain.Actor, yea
 	return overview, nil
 }
 
+type ConvertApprovedToPlanningInput struct {
+	Year            int
+	Month           int
+	ApprovedFileID  int64
+	SelectedTeamIDs []int64
+}
+
+type ConvertApprovedToPlanningResult struct {
+	PlanningItemsCreated int
+	SourceFileID         int64
+	ConvertedAt          string
+}
+
+// ConvertApprovedToPlanning validates an approved/master monthly-plan file as a planning source.
+// Planning Calendar is currently a projection over monthly-plan files, so this operation is
+// intentionally idempotent: once the approved file is accepted as the source, selected teams
+// are counted as planning items and the calendar projection can render from the file metadata.
+func (s *Service) ConvertApprovedToPlanning(ctx context.Context, actor mpdomain.Actor, input ConvertApprovedToPlanningInput) (*ConvertApprovedToPlanningResult, error) {
+	if !actor.CanUploadMasterPlan() {
+		return nil, mpdomain.ErrForbiddenAction
+	}
+	if input.Year < 2000 || input.Year > 2100 || input.Month < 1 || input.Month > 12 {
+		return nil, mpdomain.ErrInvalidPeriod
+	}
+	if input.ApprovedFileID <= 0 || len(input.SelectedTeamIDs) == 0 {
+		return nil, mpdomain.ErrInvalidFileID
+	}
+	period, err := s.repo.FindOrCreatePeriod(ctx, input.Year, input.Month)
+	if err != nil {
+		return nil, err
+	}
+	if period == nil {
+		return nil, mpdomain.ErrPeriodNotFound
+	}
+	file, err := s.repo.GetFileByID(ctx, input.ApprovedFileID)
+	if err != nil || file == nil {
+		return nil, mpdomain.ErrFileNotFound
+	}
+	if !file.IsMasterPlan || file.IsDeleted || file.MonthlyPlanID != period.ID {
+		return nil, mpdomain.ErrFileNotFound
+	}
+	seen := make(map[int64]struct{}, len(input.SelectedTeamIDs))
+	for _, teamID := range input.SelectedTeamIDs {
+		if teamID <= 0 {
+			return nil, mpdomain.ErrInvalidFileID
+		}
+		seen[teamID] = struct{}{}
+	}
+	return &ConvertApprovedToPlanningResult{
+		PlanningItemsCreated: len(seen),
+		SourceFileID:         file.ID,
+		ConvertedAt:          s.clock().UTC().Format(time.RFC3339),
+	}, nil
+}
+
 // ── Files ────────────────────────────────────────────────────────────────────
 
 // PresignUpload generates a presigned upload URL after validating permissions and file type.
@@ -327,7 +382,11 @@ func (s *Service) SoftDeleteFile(ctx context.Context, actor mpdomain.Actor, file
 	if file.IsDeleted {
 		return mpdomain.ErrFileNotDeleted
 	}
-	if !file.IsMasterPlan && !actor.CanAccessFile(file.TeamID) {
+	if file.IsMasterPlan {
+		if !actor.CanUploadMasterPlan() {
+			return mpdomain.ErrForbiddenAction
+		}
+	} else if !actor.CanAccessFile(file.TeamID) {
 		return mpdomain.ErrForbiddenAction
 	}
 	return s.repo.SoftDeleteFile(ctx, repository.PlanFileSoftDeleteInput{ID: fileID})

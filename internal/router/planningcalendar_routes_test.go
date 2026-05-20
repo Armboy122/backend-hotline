@@ -2,6 +2,8 @@ package router
 
 import (
 	"net/http"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,5 +21,15 @@ func TestPlanningCalendarRoutesAreRegistered(t *testing.T) {
 
 	if !routes[http.MethodGet+" /v1/planning/calendar/:year/:month"] {
 		t.Fatal("missing planning calendar route")
+	}
+}
+
+func TestMonthlyPlanConvertToPlanningRouteIsRegistered(t *testing.T) {
+	source, err := os.ReadFile("router.go")
+	if err != nil {
+		t.Fatalf("read router.go: %v", err)
+	}
+	if !strings.Contains(string(source), `monthlyPlansV1.POST("/:year/:month/convert-to-planning", monthlyPlanController.ConvertApprovedToPlanning)`) {
+		t.Fatal("missing monthly plan convert-to-planning route registration")
 	}
 }

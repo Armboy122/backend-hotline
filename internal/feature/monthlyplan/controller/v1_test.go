@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +74,68 @@ func TestGetYearOverviewReturnsAllMonthsWithLockActionsAndFiles(t *testing.T) {
 	}
 	if len(june.Files) != 1 || june.Files[0].FileName != "june-master.pdf" || !june.Files[0].IsMasterPlan {
 		t.Fatalf("unexpected June files: %+v", june.Files)
+	}
+}
+
+func TestConvertApprovedToPlanningResponseContractAndCapability(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	teamID := int64(7)
+	approved := &entity.PlanFileEntity{ID: 6001, MonthlyPlanID: 6, IsMasterPlan: true, FileName: "approved.pdf"}
+	repo := &overviewFakeRepo{
+		settings: &entity.SettingsEntity{LockDay: 23},
+		filesByPlan: map[int64][]entity.PlanFileEntity{
+			6: {*approved},
+		},
+	}
+	svc := service.NewService(&downloadTestFakeRepo{inner: repo, file: approved}, &overviewFakeStorage{})
+	svc.SetClockForTest(func() time.Time { return time.Date(2026, 5, 21, 8, 0, 0, 0, time.UTC) })
+	ctrl := NewController(svc)
+
+	forbiddenRouter := gin.New()
+	forbiddenRouter.Use(func(c *gin.Context) {
+		c.Set("user_id", uint(41))
+		c.Set("role", "team_lead")
+		c.Set("team_id", teamID)
+	})
+	forbiddenRouter.POST("/v1/monthly-plans/:year/:month/convert-to-planning", ctrl.ConvertApprovedToPlanning)
+	forbidden := httptest.NewRecorder()
+	forbiddenReq := httptest.NewRequest(http.MethodPost, "/v1/monthly-plans/2026/6/convert-to-planning", strings.NewReader(`{"year":2026,"month":6,"approvedFileId":6001,"selectedTeamIds":[7]}`))
+	forbiddenReq.Header.Set("Content-Type", "application/json")
+	forbiddenRouter.ServeHTTP(forbidden, forbiddenReq)
+	if forbidden.Code != http.StatusForbidden {
+		t.Fatalf("expected no-capability actor to get 403, got %d body=%s", forbidden.Code, forbidden.Body.String())
+	}
+
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", uint(41))
+		c.Set("role", "team_lead")
+		c.Set("team_id", teamID)
+		c.Set("capabilities", []string{"can_upload_approved_monthly_plan"})
+	})
+	r.POST("/v1/monthly-plans/:year/:month/convert-to-planning", ctrl.ConvertApprovedToPlanning)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/monthly-plans/2026/6/convert-to-planning", strings.NewReader(`{"year":2026,"month":6,"approvedFileId":6001,"selectedTeamIds":[7,8]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Success bool `json:"success"`
+		Data    struct {
+			PlanningItemsCreated int    `json:"planningItemsCreated"`
+			SourceFileID         int64  `json:"sourceFileId"`
+			ConvertedAt          string `json:"convertedAt"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !body.Success || body.Data.PlanningItemsCreated != 2 || body.Data.SourceFileID != 6001 || body.Data.ConvertedAt != "2026-05-21T08:00:00Z" {
+		t.Fatalf("unexpected response: %+v", body)
 	}
 }
 

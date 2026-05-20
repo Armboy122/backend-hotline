@@ -233,13 +233,24 @@ func (r *controllerFakeRepo) Delete(context.Context, uint) error { return nil }
 func (r *controllerFakeRepo) GetPasswordHash(context.Context, uint) (string, error) {
 	return "$2a$12$BL9bVdgl.6mnHeYvuewIEeJcDObTvWNiyzxkSvjKw8aUP3XvR2lRm", nil
 }
-func (r *controllerFakeRepo) UpdatePassword(_ context.Context, id uint, hashed string) error {
+func (r *controllerFakeRepo) MustChangePassword(context.Context, uint) (bool, error) {
+	return false, nil
+}
+func (r *controllerFakeRepo) UpdatePassword(_ context.Context, id uint, hashed string, mustChangePassword bool) error {
 	r.updatedPasswordID = id
 	r.updatedPasswordHash = hashed
 	return nil
 }
 func (r *controllerFakeRepo) CountActiveSuperAdmins(context.Context, *uint) (int64, error) {
 	return r.activeSuperAdmins, nil
+}
+
+func (r *controllerFakeRepo) CreateExternalContact(_ context.Context, input entity.ExternalContactInput) (entity.ContactInfo, error) {
+	active := true
+	if input.IsActive != nil {
+		active = *input.IsActive
+	}
+	return entity.ContactInfo{ExternalID: 1, Source: entity.ContactSourceExternal, Type: input.Type, DisplayName: &input.DisplayName, PhoneNumber: &input.PhoneNumber, Organization: input.Organization, Position: input.Position, Notes: input.Notes, TeamID: input.TeamID, IsActive: active}, nil
 }
 
 func (r *controllerFakeRepo) ListContacts(_ context.Context, q entity.ContactListQuery) ([]entity.ContactInfo, int64, error) {

@@ -14,16 +14,17 @@ func FromModel(u models.User) entity.UserInfo {
 		lastLogin = u.LastLogin.Format(time.RFC3339)
 	}
 	info := entity.UserInfo{
-		ID:          u.ID,
-		Username:    u.Username,
-		Role:        u.Role,
-		TeamID:      u.TeamID,
-		DisplayName: u.DisplayName,
-		Position:    u.Position,
-		PhoneNumber: u.PhoneNumber,
-		IsActive:    u.IsActive,
-		LastLogin:   &lastLogin,
-		CreatedAt:   u.CreatedAt.Format(time.RFC3339),
+		ID:                 u.ID,
+		Username:           u.Username,
+		Role:               u.Role,
+		TeamID:             u.TeamID,
+		DisplayName:        u.DisplayName,
+		Position:           u.Position,
+		PhoneNumber:        u.PhoneNumber,
+		IsActive:           u.IsActive,
+		MustChangePassword: u.MustChangePassword,
+		LastLogin:          &lastLogin,
+		CreatedAt:          u.CreatedAt.Format(time.RFC3339),
 	}
 	if u.Team != nil {
 		info.Team = &entity.TeamInfo{ID: u.Team.ID, Name: u.Team.Name}
@@ -33,16 +34,17 @@ func FromModel(u models.User) entity.UserInfo {
 
 func ToResponse(info entity.UserInfo) dto.UserResponse {
 	resp := dto.UserResponse{
-		ID:          info.ID,
-		Username:    info.Username,
-		Role:        info.Role,
-		TeamID:      info.TeamID,
-		DisplayName: info.DisplayName,
-		Position:    info.Position,
-		PhoneNumber: info.PhoneNumber,
-		IsActive:    info.IsActive,
-		LastLogin:   info.LastLogin,
-		CreatedAt:   info.CreatedAt,
+		ID:                 info.ID,
+		Username:           info.Username,
+		Role:               info.Role,
+		TeamID:             info.TeamID,
+		DisplayName:        info.DisplayName,
+		Position:           info.Position,
+		PhoneNumber:        info.PhoneNumber,
+		IsActive:           info.IsActive,
+		MustChangePassword: info.MustChangePassword,
+		LastLogin:          info.LastLogin,
+		CreatedAt:          info.CreatedAt,
 	}
 	if info.Team != nil {
 		resp.Team = &dto.TeamNested{ID: info.Team.ID, Name: info.Team.Name}

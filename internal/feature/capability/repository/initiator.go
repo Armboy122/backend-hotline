@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"backend-hotlines3/internal/feature/capability/entity"
 	"backend-hotlines3/internal/models"
 
 	"gorm.io/gorm"
@@ -12,6 +14,7 @@ import (
 type Repository interface {
 	ListCodesByUserID(ctx context.Context, userID uint) ([]string, error)
 	ReplaceCodes(ctx context.Context, userID uint, codes []string, grantedBy *uint) error
+	GetTargetUser(ctx context.Context, userID uint) (*entity.TargetUser, error)
 }
 
 type repository struct {
@@ -35,6 +38,17 @@ func (r *repository) ListCodesByUserID(ctx context.Context, userID uint) ([]stri
 		out = append(out, row.Code)
 	}
 	return out, nil
+}
+
+func (r *repository) GetTargetUser(ctx context.Context, userID uint) (*entity.TargetUser, error) {
+	var user models.User
+	if err := r.db.WithContext(ctx).Scopes(models.UserNotDeleted).First(&user, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, entity.ErrTargetUserNotFound
+		}
+		return nil, err
+	}
+	return &entity.TargetUser{ID: user.ID, Role: user.Role, IsActive: user.IsActive}, nil
 }
 
 func (r *repository) ReplaceCodes(ctx context.Context, userID uint, codes []string, grantedBy *uint) error {

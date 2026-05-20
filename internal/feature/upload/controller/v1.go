@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"backend-hotlines3/internal/dto"
+	"backend-hotlines3/internal/feature/auth/policy"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -24,6 +25,11 @@ var allowedImageTypes = map[string]bool{
 }
 
 func (h *Controller) GetPresignedURL(c *gin.Context) {
+	if role, _ := c.Get("role"); role != policy.RoleSuperAdmin {
+		c.JSON(http.StatusForbidden, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "FORBIDDEN", Message: "Insufficient permissions"}})
+		return
+	}
+
 	var req dto.UploadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, dto.StandardResponse{
@@ -90,6 +96,11 @@ func (h *Controller) GetPresignedURL(c *gin.Context) {
 }
 
 func (h *Controller) DeleteFile(c *gin.Context) {
+	if role, _ := c.Get("role"); role != policy.RoleSuperAdmin {
+		c.JSON(http.StatusForbidden, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "FORBIDDEN", Message: "Insufficient permissions"}})
+		return
+	}
+
 	fileKey := c.Param("key")
 	fileKey = strings.TrimPrefix(fileKey, "/")
 
