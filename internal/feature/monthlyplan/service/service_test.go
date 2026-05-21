@@ -195,6 +195,18 @@ func TestListFilesScopesNonAdminToActorTeam(t *testing.T) {
 	}
 }
 
+func TestGetFileRejectsViewerDownloadEvenForApprovedMasterPlan(t *testing.T) {
+	ctx := context.Background()
+	approved := &entity.PlanFileEntity{ID: 6001, TeamID: nil, IsMasterPlan: true, FileKey: "approved/master.pdf"}
+	repo := &fakeRepo{fileByID: approved}
+	svc := NewService(repo, &fakeStorage{})
+
+	_, err := svc.GetFile(ctx, entity.Actor{UserID: 40, Role: "viewer"}, 6001)
+	if !errors.Is(err, entity.ErrForbiddenAction) {
+		t.Fatalf("expected viewer to be forbidden from downloading approved master plan, got %v", err)
+	}
+}
+
 func TestSoftDeleteFileRequiresMasterPlanCapabilityForApprovedFiles(t *testing.T) {
 	ctx := context.Background()
 	teamID := int64(7)

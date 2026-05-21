@@ -350,8 +350,11 @@ func (s *Service) ListFiles(ctx context.Context, actor mpdomain.Actor, planID in
 	})
 }
 
-// GetFile retrieves a single plan file by ID with access control.
+// GetFile retrieves a single plan file by ID with download access control.
 func (s *Service) GetFile(ctx context.Context, actor mpdomain.Actor, fileID int64) (*mpdomain.PlanFileEntity, error) {
+	if !actor.CanDownloadFile() {
+		return nil, mpdomain.ErrForbiddenAction
+	}
 	file, err := s.repo.GetFileByID(ctx, fileID)
 	if err != nil || file == nil {
 		return nil, mpdomain.ErrFileNotFound

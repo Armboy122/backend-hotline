@@ -14,6 +14,12 @@ func TestMigrationModelsIncludeLargeWorkFoundation(t *testing.T) {
 	assertMigrationModelRegistered[models.LargeWorkTask](t, migrationModels)
 }
 
+func TestMigrationModelsIncludeContactDirectoryExternalContacts(t *testing.T) {
+	migrationModels := MigrationModels()
+
+	assertMigrationModelRegistered[models.ExternalContact](t, migrationModels)
+}
+
 func assertMigrationModelRegistered[T any](t *testing.T, migrationModels []any) {
 	t.Helper()
 	for _, model := range migrationModels {

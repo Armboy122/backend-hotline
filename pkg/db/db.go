@@ -99,6 +99,7 @@ func MigrationModels() []any {
 		&models.FileSizeLog{},
 		&models.MonthlyPlanSetting{},
 		&models.TeamPlan{},
+		&models.ExternalContact{},
 		&models.LargeWorkItem{},
 		&models.LargeWorkItemTeam{},
 		&models.LargeWorkTask{},
