@@ -178,17 +178,49 @@ database:
 - Type-safe configuration
 - Easy to test
 
-## Database Schema
+## Database Schema / Migrations
 
-GORM จะสร้างตารางอัตโนมัติเมื่อรัน (Auto Migration):
-- `operation_centers`
-- `peas`
-- `stations`
-- `feeders`
-- `job_types`
-- `job_details`
-- `teams`
-- `task_dailies`
+โปรเจกต์นี้ใช้ **Goose** เป็นเจ้าของ schema หลัก และใช้ **GORM** สำหรับ model/query เท่านั้น
+
+- migration files อยู่ที่ `pkg/db/migrations/`
+- ทุกครั้งที่เพิ่ม/แก้ table, column, index, constraint ต้องเพิ่มไฟล์ Goose migration ก่อน deploy
+- Cloud Run production ต้องรัน migration **ก่อน deploy** backend revision ที่ใช้ schema ใหม่
+- `database.auto_migrate` ใน `config.yaml` ควรคงเป็น `false` สำหรับ production เพื่อไม่ให้ app mutate schema ตอน start
+
+ติดตั้ง Goose CLI:
+```bash
+go install github.com/pressly/goose/v3/cmd/goose@latest
+```
+
+รัน migration ด้วย config ปัจจุบัน (`config.yaml` + `.env`) ผ่าน `scripts/migrate.sh`:
+```bash
+make migrate
+make migrate-status
+```
+
+รัน production migration แบบ explicit ก่อน deploy Cloud Run:
+```bash
+export DATABASE_URL='postgres://...'
+make migrate-prod
+make migrate-prod-status
+```
+
+หรือใช้ `GOOSE_DBSTRING` แทน `DATABASE_URL` ได้:
+```bash
+export GOOSE_DBSTRING='host=... port=5432 user=... password=... dbname=... sslmode=require'
+make migrate-prod
+```
+
+Deploy checklist สำหรับ Cloud Run:
+1. เพิ่ม Goose migration ใน `pkg/db/migrations/`
+2. รัน `go test ./pkg/db/migrations ./...`
+3. รัน production gate ก่อน deploy:
+   ```bash
+   export DATABASE_URL='postgres://...'
+   make predeploy-prod
+   ```
+4. deploy Cloud Run backend
+5. smoke test API ที่ใช้ schema ใหม่
 
 ## Development
 

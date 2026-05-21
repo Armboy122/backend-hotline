@@ -2,10 +2,12 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
 	"backend-hotlines3/internal/dto"
+	userentity "backend-hotlines3/internal/feature/user/entity"
 	"backend-hotlines3/pkg/jwt"
 
 	"github.com/gin-gonic/gin"
@@ -60,6 +62,11 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 		if m.passwordStatusStore != nil && !isPasswordChangeExempt(c.Request.Method, c.Request.URL.Path) {
 			mustChange, err := m.passwordStatusStore.MustChangePassword(c.Request.Context(), claims.UserID)
 			if err != nil {
+				if errors.Is(err, userentity.ErrNotFound) {
+					c.JSON(http.StatusUnauthorized, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "SESSION_USER_NOT_FOUND", Message: "Session user not found. Please sign in again"}})
+					c.Abort()
+					return
+				}
 				c.JSON(http.StatusInternalServerError, dto.StandardResponse{Success: false, Error: &dto.ErrorInfo{Code: "PASSWORD_STATUS_ERROR", Message: "Unable to verify password status"}})
 				c.Abort()
 				return
