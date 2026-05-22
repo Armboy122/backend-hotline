@@ -344,11 +344,12 @@ type ContactDirectoryResponse struct {
 }
 
 type CreateUserRequest struct {
-	Username string `json:"username" binding:"required,len=6,numeric"`
-	Password string `json:"password" binding:"omitempty,min=6"`
-	Role     string `json:"role" binding:"required,oneof=super_admin team_lead user viewer"`
-	TeamID   *int64 `json:"teamId"`
-	IsActive *bool  `json:"isActive"`
+	Username    string  `json:"username" binding:"required,len=6,numeric"`
+	Password    string  `json:"password" binding:"omitempty,min=6"`
+	Role        string  `json:"role" binding:"required,oneof=super_admin team_lead user viewer"`
+	TeamID      *int64  `json:"teamId"`
+	DisplayName *string `json:"displayName" binding:"omitempty,max=120"`
+	IsActive    *bool   `json:"isActive"`
 }
 
 type UpdateUserRequest struct {

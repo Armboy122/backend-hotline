@@ -100,6 +100,7 @@ type DateRange struct {
 type ItemActions struct {
 	CanEdit     bool `json:"canEdit"`
 	CanDelete   bool `json:"canDelete"`
+	CanCancel   bool `json:"canCancel"`
 	CanDownload bool `json:"canDownload"`
 }
 
@@ -319,6 +320,7 @@ func buildMonthlyPlanItem(actor monthlyentity.Actor, file monthlyentity.PlanFile
 }
 
 func buildLargeWorkItem(actor largeworkentity.Actor, work largeworkentity.LargeWorkItem) CalendarItem {
+	canCancel := actor.CanCancelLargeWork(&work)
 	item := CalendarItem{
 		SourceType: SourceTypeLargeWork,
 		SourceID:   work.ID,
@@ -329,8 +331,9 @@ func buildLargeWorkItem(actor largeworkentity.Actor, work largeworkentity.LargeW
 		Status:     work.Status,
 		DateRange:  DateRange{StartDate: work.StartDate.Format(dateLayout)},
 		Actions: ItemActions{
-			CanEdit:   true,
-			CanDelete: true,
+			CanEdit:   false,
+			CanDelete: canCancel,
+			CanCancel: canCancel,
 		},
 	}
 	if work.EndDate != nil && !work.EndDate.IsZero() {
@@ -347,10 +350,6 @@ func buildLargeWorkItem(actor largeworkentity.Actor, work largeworkentity.LargeW
 			item.Teams = append(item.Teams, TeamRef{ID: team.ID, Name: team.Name})
 		}
 	}
-	// Large-work calendar entries are read-only in the MVP; edits happen through
-	// the large-work feature endpoints so planning-board/task invariants stay centralized.
-	item.Actions.CanEdit = false
-	item.Actions.CanDelete = false
 	return item
 }
 

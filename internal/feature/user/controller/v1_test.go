@@ -57,6 +57,26 @@ func TestCreateRejectsLegacyAdminRolePayload(t *testing.T) {
 	}
 }
 
+func TestCreateAcceptsDisplayName(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &controllerFakeRepo{activeSuperAdmins: 1}
+	r := gin.New()
+	ctrl := NewController(service.NewService(repo))
+	r.POST("/users", withActor(1, policy.RoleSuperAdmin), ctrl.Create)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/users", bytes.NewBufferString(`{"username":"123456","displayName":"นายสมชาย ใจดี","role":"user","teamId":2}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d body=%s, want 201", rec.Code, rec.Body.String())
+	}
+	if repo.created.DisplayName == nil || *repo.created.DisplayName != "นายสมชาย ใจดี" {
+		t.Fatalf("displayName not persisted to repository input: %#v", repo.created.DisplayName)
+	}
+}
+
 func TestResetPasswordForbidsAdminAndAllowsSuperAdmin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &controllerFakeRepo{users: map[uint]entity.UserInfo{2: {ID: 2, Role: policy.RoleUser, IsActive: true}}}
@@ -215,7 +235,7 @@ func (r *controllerFakeRepo) GetByID(_ context.Context, id uint) (entity.UserInf
 
 func (r *controllerFakeRepo) Create(_ context.Context, in entity.CreateInput) (entity.UserInfo, error) {
 	r.created = in
-	return entity.UserInfo{ID: 100, Username: in.Username, Role: in.Role, TeamID: in.TeamID, IsActive: in.IsActive}, nil
+	return entity.UserInfo{ID: 100, Username: in.Username, Role: in.Role, TeamID: in.TeamID, DisplayName: in.DisplayName, IsActive: in.IsActive}, nil
 }
 
 func (r *controllerFakeRepo) Update(_ context.Context, id uint, in entity.UpdateInput) (entity.UserInfo, error) {

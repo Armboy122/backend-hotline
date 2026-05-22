@@ -131,6 +131,7 @@ func (r *repository) Create(ctx context.Context, in entity.CreateInput) (entity.
 		Password:           in.HashedPassword,
 		Role:               in.Role,
 		TeamID:             in.TeamID,
+		DisplayName:        in.DisplayName,
 		IsActive:           in.IsActive,
 		MustChangePassword: in.MustChangePassword,
 	}

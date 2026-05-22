@@ -391,7 +391,7 @@ func TestGetMonthIncludesLargeWorkItemsWithTeamRefs(t *testing.T) {
 	}
 }
 
-func TestGetMonthDeniesOwnerTeamLeadLargeWorkEditActionsInMVP(t *testing.T) {
+func TestGetMonthAllowsOwnerTeamLeadToDeleteLargeWorkFromPlanning(t *testing.T) {
 	teamID := int64(77)
 	start := time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)
 	largeRepo := &fakeLargeWorkRepo{items: []largeworkentity.LargeWorkItem{{
@@ -417,8 +417,11 @@ func TestGetMonthDeniesOwnerTeamLeadLargeWorkEditActionsInMVP(t *testing.T) {
 	if item == nil {
 		t.Fatal("expected large-work item on 2026-06-10")
 	}
-	if item.Actions.CanEdit || item.Actions.CanDelete {
-		t.Fatalf("owner team lead should not be able to edit/delete large work in MVP: %#v", item.Actions)
+	if item.Actions.CanEdit {
+		t.Fatalf("owner team lead should not edit large work from planning calendar: %#v", item.Actions)
+	}
+	if !item.Actions.CanDelete || !item.Actions.CanCancel {
+		t.Fatalf("owner team lead should delete/cancel large work from planning calendar: %#v", item.Actions)
 	}
 }
 

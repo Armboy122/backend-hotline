@@ -146,11 +146,16 @@ func (s *Service) Create(ctx context.Context, actor entity.Actor, req dto.Create
 	if err != nil {
 		return entity.UserInfo{}, err
 	}
+	displayName := normalizeContactField(req.DisplayName)
+	if exceedsMax(displayName, 120) {
+		return entity.UserInfo{}, entity.ErrInvalidContactField
+	}
 	return s.repo.Create(ctx, entity.CreateInput{
 		Username:           req.Username,
 		HashedPassword:     hashed,
 		Role:               req.Role,
 		TeamID:             req.TeamID,
+		DisplayName:        displayName,
 		IsActive:           isActive,
 		MustChangePassword: true,
 	})

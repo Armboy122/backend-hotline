@@ -169,6 +169,8 @@ func (c *Controller) Create(ctx *gin.Context) {
 			ctx.JSON(http.StatusConflict, dto.StandardResponse{Success: false, Error: errResp("SUPER_ADMIN_EXISTS", "Active super admin already exists")})
 		case errors.Is(err, entity.ErrInvalidRole):
 			ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("INVALID_ROLE", "Invalid role")})
+		case errors.Is(err, entity.ErrInvalidContactField):
+			ctx.JSON(http.StatusBadRequest, dto.StandardResponse{Success: false, Error: errResp("BAD_REQUEST", "Invalid contact field")})
 		default:
 			ctx.JSON(http.StatusInternalServerError, dto.StandardResponse{
 				Success: false, Error: errResp("INTERNAL_ERROR", "Failed to create user"),

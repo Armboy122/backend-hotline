@@ -105,12 +105,14 @@ func TestCreateUsesServerDefaultPasswordAndRequiresFirstLoginChange(t *testing.T
 	ctx := context.Background()
 	repo := &fakeRepo{}
 	svc := NewService(repo)
+	displayName := " นายสมชาย ใจดี "
 
 	_, err := svc.Create(ctx, entity.Actor{ID: 1, Role: policy.RoleSuperAdmin}, dto.CreateUserRequest{
-		Username: "456789",
-		Password: "client-supplied-ignored",
-		Role:     policy.RoleUser,
-		TeamID:   ptrInt64(2),
+		Username:    "456789",
+		Password:    "client-supplied-ignored",
+		Role:        policy.RoleUser,
+		TeamID:      ptrInt64(2),
+		DisplayName: &displayName,
 	})
 	if err != nil {
 		t.Fatalf("Create user: %v", err)
@@ -123,6 +125,9 @@ func TestCreateUsesServerDefaultPasswordAndRequiresFirstLoginChange(t *testing.T
 	}
 	if !repo.createdPasswordMatchesDefault {
 		t.Fatalf("create should hash the server-owned default password")
+	}
+	if repo.created.DisplayName == nil || *repo.created.DisplayName != "นายสมชาย ใจดี" {
+		t.Fatalf("create should trim and persist displayName, got %#v", repo.created.DisplayName)
 	}
 }
 
@@ -283,7 +288,7 @@ func (r *fakeRepo) GetByID(_ context.Context, id uint) (entity.UserInfo, error) 
 func (r *fakeRepo) Create(_ context.Context, in entity.CreateInput) (entity.UserInfo, error) {
 	r.created = in
 	r.createdPasswordMatchesDefault = password.CheckPassword(adminCreatedDefaultPassword, in.HashedPassword)
-	return entity.UserInfo{ID: 100, Username: in.Username, Role: in.Role, TeamID: in.TeamID, IsActive: in.IsActive, MustChangePassword: in.MustChangePassword}, nil
+	return entity.UserInfo{ID: 100, Username: in.Username, Role: in.Role, TeamID: in.TeamID, DisplayName: in.DisplayName, IsActive: in.IsActive, MustChangePassword: in.MustChangePassword}, nil
 }
 
 func (r *fakeRepo) Update(_ context.Context, id uint, in entity.UpdateInput) (entity.UserInfo, error) {

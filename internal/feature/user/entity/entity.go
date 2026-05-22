@@ -63,6 +63,7 @@ type CreateInput struct {
 	HashedPassword     string
 	Role               string
 	TeamID             *int64
+	DisplayName        *string
 	IsActive           bool
 	MustChangePassword bool
 }
