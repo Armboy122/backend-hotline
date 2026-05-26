@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"backend-hotlines3/internal/feature/auth/policy"
 	"backend-hotlines3/internal/feature/teamplan/entity"
@@ -105,6 +106,17 @@ func TestCreateUpdateGetAndDeleteMapAuthAndDomainErrors(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/team-plans", strings.NewReader(`{"teamId":7,"title":"Unscheduled patrol","locationText":"Bang Khen"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("unscheduled create status = %d, want 201 body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.createInput.StartDate != nil {
+		t.Fatalf("unscheduled create startDate = %v, want nil", fake.createInput.StartDate)
+	}
+
+	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPut, "/team-plans/10", strings.NewReader(`{"title":"Patrol updated"}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(rec, req)
@@ -150,6 +162,67 @@ func TestCreateUpdateGetAndDeleteMapAuthAndDomainErrors(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("forbidden delete status = %d, want 403 body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUpdateParsesDateAndWorkTimeAndMapsRangeErrors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	teamID := int64(7)
+	startDate := time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2026, 6, 9, 0, 0, 0, 0, time.UTC)
+	workTime := "09:00-16:00"
+	plan := entity.TeamPlan{
+		ID:              10,
+		TeamID:          teamID,
+		CreatedByUserID: 91,
+		Title:           "Patrol",
+		StartDate:       &startDate,
+		EndDate:         &endDate,
+		WorkTime:        &workTime,
+		LocationText:    "Bang Khen",
+		Status:          entity.StatusPlanned,
+	}
+	fake := &fakeTeamPlanService{updateResult: &plan}
+	ctrl := NewController(fake)
+	r := gin.New()
+	r.Use(withActor(1, policy.RoleSuperAdmin, nil))
+	r.PUT("/team-plans/:id", ctrl.Update)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/team-plans/10", strings.NewReader(`{"startDate":"2026-06-07","endDate":"2026-06-09","workTime":"09:00-16:00"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update dates status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.updateInput.StartDate == nil || fake.updateInput.EndDate == nil || fake.updateInput.WorkTime == nil {
+		t.Fatalf("update input missing date/workTime fields: %+v", fake.updateInput)
+	}
+	if !fake.updateInput.StartDate.Equal(startDate) || !fake.updateInput.EndDate.Equal(endDate) || *fake.updateInput.WorkTime != workTime {
+		t.Fatalf("update input = %+v, want start/end/workTime", fake.updateInput)
+	}
+	var body struct {
+		Success bool `json:"success"`
+		Data    struct {
+			StartDate string `json:"startDate"`
+			EndDate   string `json:"endDate"`
+			WorkTime  string `json:"workTime"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode update response: %v", err)
+	}
+	if !body.Success || body.Data.StartDate != "2026-06-07" || body.Data.EndDate != "2026-06-09" || body.Data.WorkTime != workTime {
+		t.Fatalf("unexpected update response body: %+v", body)
+	}
+
+	fake.updateErr = entity.ErrInvalidRange
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPut, "/team-plans/10", strings.NewReader(`{"startDate":"2026-06-09","endDate":"2026-06-07"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid date range status = %d, want 400 body=%s", rec.Code, rec.Body.String())
 	}
 }
 

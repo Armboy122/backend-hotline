@@ -39,6 +39,19 @@ func TestServiceCreateEnforcesRoleAndTeamScope(t *testing.T) {
 
 	repo = &fakeRepo{}
 	svc = NewService(repo)
+	unscheduledInput := input
+	unscheduledInput.StartDate = nil
+	if created, err := svc.Create(ctx, lead, unscheduledInput); err != nil {
+		t.Fatalf("team lead create unscheduled draft: %v", err)
+	} else if created.Status != entity.StatusDraft {
+		t.Fatalf("unscheduled plan status = %q, want draft", created.Status)
+	}
+	if repo.createInput == nil || repo.createInput.StartDate != nil || repo.createInput.Status != entity.StatusDraft {
+		t.Fatalf("unscheduled create input = %+v, want nil startDate and draft status", repo.createInput)
+	}
+
+	repo = &fakeRepo{}
+	svc = NewService(repo)
 	if _, err := svc.Create(ctx, user, input); err != nil {
 		t.Fatalf("user create: %v", err)
 	}
@@ -235,6 +248,86 @@ func TestServiceUpdateRejectsEndOnlyDateBeforeExistingStartDate(t *testing.T) {
 	}
 }
 
+func TestServiceUpdateAllowsAuthorizedDateAndWorkTimeEdit(t *testing.T) {
+	ctx := context.Background()
+	teamID := int64(7)
+	creatorID := int64(91)
+	actor := entity.Actor{UserID: 1, Role: policy.RoleSuperAdmin}
+	existingStart := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+	existingEnd := time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC)
+	plan := entity.TeamPlan{
+		ID:              10,
+		TeamID:          teamID,
+		CreatedByUserID: creatorID,
+		Title:           "Patrol feeder A",
+		LocationText:    "Bang Khen",
+		Status:          entity.StatusPlanned,
+		StartDate:       &existingStart,
+		EndDate:         &existingEnd,
+	}
+	repo := &fakeRepo{getByIDResult: &plan}
+	svc := NewService(repo)
+	newStart := time.Date(2026, 6, 7, 9, 30, 0, 0, time.Local)
+	newEnd := time.Date(2026, 6, 9, 18, 15, 0, 0, time.Local)
+	workTime := "09:00-16:00"
+
+	updated, err := svc.Update(ctx, actor, UpdateInput{ID: plan.ID, StartDate: &newStart, EndDate: &newEnd, WorkTime: &workTime})
+
+	if err != nil {
+		t.Fatalf("super admin update dates/work time: %v", err)
+	}
+	if repo.updateInput == nil || repo.updateInput.StartDate == nil || repo.updateInput.EndDate == nil || repo.updateInput.WorkTime == nil {
+		t.Fatalf("update input missing dates/workTime: %+v", repo.updateInput)
+	}
+	wantStart := time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC)
+	wantEnd := time.Date(2026, 6, 9, 0, 0, 0, 0, time.UTC)
+	if !repo.updateInput.StartDate.Equal(wantStart) || !repo.updateInput.EndDate.Equal(wantEnd) {
+		t.Fatalf("update dates = %v/%v, want %v/%v", repo.updateInput.StartDate, repo.updateInput.EndDate, wantStart, wantEnd)
+	}
+	if *repo.updateInput.WorkTime != workTime || updated.WorkTime == nil || *updated.WorkTime != workTime {
+		t.Fatalf("workTime not preserved through update: input=%+v updated=%+v", repo.updateInput.WorkTime, updated.WorkTime)
+	}
+}
+
+func TestServiceUpdateOmittedDateFieldsPreserveExistingValues(t *testing.T) {
+	ctx := context.Background()
+	teamID := int64(7)
+	creatorID := int64(91)
+	actor := entity.Actor{UserID: creatorID, Role: policy.RoleUser, TeamID: &teamID}
+	existingStart := time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC)
+	existingEnd := time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC)
+	existingWorkTime := "เช้า"
+	plan := entity.TeamPlan{
+		ID:              10,
+		TeamID:          teamID,
+		CreatedByUserID: creatorID,
+		Title:           "Patrol feeder A",
+		LocationText:    "Bang Khen",
+		Status:          entity.StatusPlanned,
+		StartDate:       &existingStart,
+		EndDate:         &existingEnd,
+		WorkTime:        &existingWorkTime,
+	}
+	repo := &fakeRepo{getByIDResult: &plan}
+	svc := NewService(repo)
+	title := "Patrol feeder A - updated"
+
+	updated, err := svc.Update(ctx, actor, UpdateInput{ID: plan.ID, Title: &title})
+
+	if err != nil {
+		t.Fatalf("user update title only: %v", err)
+	}
+	if repo.updateInput == nil || repo.updateInput.StartDate != nil || repo.updateInput.EndDate != nil {
+		t.Fatalf("omitted dates should be sent as nil update fields, got %+v", repo.updateInput)
+	}
+	if updated.StartDate == nil || updated.EndDate == nil || !updated.StartDate.Equal(existingStart) || !updated.EndDate.Equal(existingEnd) {
+		t.Fatalf("omitted dates not preserved: got start=%v end=%v", updated.StartDate, updated.EndDate)
+	}
+	if updated.WorkTime == nil || *updated.WorkTime != existingWorkTime {
+		t.Fatalf("omitted workTime not preserved: got %v", updated.WorkTime)
+	}
+}
+
 func TestServiceUpdateAndDeleteEnforceOwnershipRules(t *testing.T) {
 	ctx := context.Background()
 	teamID := int64(7)
@@ -284,6 +377,26 @@ func TestServiceUpdateAndDeleteEnforceOwnershipRules(t *testing.T) {
 	svc = NewService(repo)
 	if _, err := svc.Update(ctx, superAdmin, UpdateInput{ID: otherTeamPlan.ID, Title: &newTitle, TeamID: &otherTeamID}); err != nil {
 		t.Fatalf("super admin update: %v", err)
+	}
+
+	viewer := entity.Actor{UserID: 5, Role: policy.RoleViewer, TeamID: &teamID}
+	repo = &fakeRepo{getByIDResult: &plan}
+	svc = NewService(repo)
+	if _, err := svc.Update(ctx, viewer, UpdateInput{ID: plan.ID, Title: &newTitle}); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("viewer update expected forbidden, got %v", err)
+	}
+	if repo.updateCalled {
+		t.Fatalf("repository should not be called on viewer update")
+	}
+
+	repo = &fakeRepo{getByIDResult: &plan}
+	svc = NewService(repo)
+	legacyAdmin := entity.Actor{UserID: 4, Role: policy.RoleAdmin, TeamID: &teamID}
+	if _, err := svc.Update(ctx, legacyAdmin, UpdateInput{ID: plan.ID, Title: &newTitle}); !errors.Is(err, entity.ErrForbidden) {
+		t.Fatalf("legacy admin update expected forbidden, got %v", err)
+	}
+	if repo.updateCalled {
+		t.Fatalf("repository should not be called on legacy admin update")
 	}
 
 	repo = &fakeRepo{getByIDResult: &plan}
@@ -444,6 +557,18 @@ func (f *fakeRepo) Update(_ context.Context, input repository.UpdateInput) (*ent
 	} else if f.getByIDResult != nil {
 		startDate = f.getByIDResult.StartDate
 	}
+	var endDate *time.Time
+	if input.EndDate != nil {
+		endDate = input.EndDate
+	} else if f.getByIDResult != nil {
+		endDate = f.getByIDResult.EndDate
+	}
+	var workTime *string
+	if input.WorkTime != nil {
+		workTime = input.WorkTime
+	} else if f.getByIDResult != nil {
+		workTime = f.getByIDResult.WorkTime
+	}
 	title := ""
 	if input.Title != nil {
 		title = *input.Title
@@ -462,7 +587,7 @@ func (f *fakeRepo) Update(_ context.Context, input repository.UpdateInput) (*ent
 	} else if f.getByIDResult != nil {
 		status = f.getByIDResult.Status
 	}
-	return &entity.TeamPlan{ID: input.ID, TeamID: teamID, CreatedByUserID: 1, Title: title, StartDate: startDate, LocationText: location, Status: status}, nil
+	return &entity.TeamPlan{ID: input.ID, TeamID: teamID, CreatedByUserID: 1, Title: title, StartDate: startDate, EndDate: endDate, WorkTime: workTime, LocationText: location, Status: status}, nil
 }
 
 func (f *fakeRepo) SoftDelete(_ context.Context, cmd repository.DeleteCommand) error {
