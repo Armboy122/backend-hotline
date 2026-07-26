@@ -33,6 +33,9 @@ import (
 	monthlyplancontroller "backend-hotlines3/internal/feature/monthlyplan/controller"
 	monthlyplanrepository "backend-hotlines3/internal/feature/monthlyplan/repository"
 	monthlyplanservice "backend-hotlines3/internal/feature/monthlyplan/service"
+	monthlyschedulecontroller "backend-hotlines3/internal/feature/monthlyschedule/controller"
+	monthlyschedulerepository "backend-hotlines3/internal/feature/monthlyschedule/repository"
+	monthscheduleservice "backend-hotlines3/internal/feature/monthlyschedule/service"
 	opcontroller "backend-hotlines3/internal/feature/operationcenter/controller"
 	oprepository "backend-hotlines3/internal/feature/operationcenter/repository"
 	opservice "backend-hotlines3/internal/feature/operationcenter/service"
@@ -336,6 +339,19 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, jwtManager *jwt.JWTManager) *g
 
 		// Monthly Plan File Management
 		monthlyPlanRepo := monthlyplanrepository.NewRepository(db)
+		monthlyScheduleRepo := monthlyschedulerepository.NewGORM(db)
+		monthlyScheduleService := monthscheduleservice.New(monthlyScheduleRepo)
+		monthlyScheduleController := monthlyschedulecontroller.New(monthlyScheduleService, cfg.Integration.ClinicToolKey)
+
+		monthlySchedulesV1 := apiV1.Group("/monthly-plans")
+		monthlySchedulesV1.Use(authMw.RequireAuth())
+		monthlySchedulesV1.GET("/:year/:month/schedule", middleware.CachePrivate(), monthlyScheduleController.GetWorkspace)
+		monthlySchedulesV1.PUT("/:year/:month/schedule/draft", monthlyScheduleController.SaveDraft)
+		monthlySchedulesV1.POST("/:year/:month/schedule/publish", monthlyScheduleController.Publish)
+
+		integrationsV1 := apiV1.Group("/integrations/clinic-tool")
+		integrationsV1.GET("/monthly-plans/:year/:month", monthlyScheduleController.GetPublishedForClinicTool)
+
 		r2Client, mpR2Err := s3.NewR2Client(s3.R2Config{
 			AccountID:       cfg.Cloudflare.R2.AccountID,
 			AccessKeyID:     cfg.Cloudflare.R2.AccessKeyID,

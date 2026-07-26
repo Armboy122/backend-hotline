@@ -1,0 +1,111 @@
+{
+  "source": "clinic-tool hardcoded dashboard fixture reviewed 2026-07-26",
+  "year": 2026,
+  "month": 7,
+  "teams": [
+    {
+      "teamCode": "CLINIC-JUL-01",
+      "baseArea": "เมืองสตูล",
+      "crewType": "ฮอทสติก",
+      "displayOrder": 1,
+      "assignments": [
+        { "assignmentType": "field", "startDate": "2026-07-21", "endDate": "2026-07-23", "destination": "พัทลุง", "note": "ระดมทีม" }
+      ]
+    },
+    {
+      "teamCode": "CLINIC-JUL-02",
+      "baseArea": "เมืองพัทลุง",
+      "crewType": "กระเช้า",
+      "displayOrder": 2,
+      "assignments": [
+        { "assignmentType": "field", "startDate": "2026-07-05", "endDate": "2026-07-11", "destination": "ระโนด" }
+      ]
+    },
+    {
+      "teamCode": "CLINIC-JUL-03",
+      "baseArea": "เมืองนราธิวาส",
+      "crewType": "กระเช้า",
+      "displayOrder": 3,
+      "assignments": [
+        { "assignmentType": "field", "startDate": "2026-07-21", "endDate": "2026-07-23", "destination": "พัทลุง", "note": "ระดมทีม" }
+      ]
+    },
+    {
+      "teamCode": "CLINIC-JUL-04",
+      "baseArea": "หาดใหญ่",
+      "crewType": "กระเช้า",
+      "displayOrder": 4,
+      "assignments": [
+        { "assignmentType": "field", "startDate": "2026-07-05", "endDate": "2026-07-08", "destination": "สตูล" },
+        { "assignmentType": "field", "startDate": "2026-07-21", "endDate": "2026-07-23", "destination": "พัทลุง", "note": "ระดมทีม" }
+      ]
+    },
+    {
+      "teamCode": "CLINIC-JUL-05",
+      "baseArea": "เมืองสงขลา",
+      "crewType": "กระเช้า",
+      "displayOrder": 5,
+      "assignments": [
+        { "assignmentType": "field", "startDate": "2026-07-21", "endDate": "2026-07-23", "destination": "พัทลุง", "note": "ระดมทีม" }
+      ]
+    },
+    {
+      "teamCode": "CLINIC-JUL-06",
+      "baseArea": "สะเดา",
+      "crewType": "กระเช้า",
+      "displayOrder": 6,
+      "assignments": [
+        { "assignmentType": "field", "startDate": "2026-07-21", "endDate": "2026-07-23", "destination": "พัทลุง", "note": "ระดมทีม" }
+      ]
+    },
+    {
+      "teamCode": "CLINIC-JUL-07",
+      "baseArea": "เมืองยะลา",
+      "crewType": "กระเช้า",
+      "displayOrder": 7,
+      "assignments": [
+        { "assignmentType": "field", "startDate": "2026-07-12", "endDate": "2026-07-18", "destination": "ปัตตานี" },
+        { "assignmentType": "field", "startDate": "2026-07-21", "endDate": "2026-07-23", "destination": "พัทลุง", "note": "ระดมทีม" }
+      ]
+    },
+    {
+      "teamCode": "CLINIC-JUL-08",
+      "baseArea": "เมืองปัตตานี",
+      "crewType": "กระเช้า",
+      "displayOrder": 8,
+      "assignments": [
+        { "assignmentType": "field", "startDate": "2026-07-05", "endDate": "2026-07-12", "destination": "หาดใหญ่" },
+        { "assignmentType": "field", "startDate": "2026-07-21", "endDate": "2026-07-23", "destination": "พัทลุง", "note": "ระดมทีม" }
+      ]
+    },
+    {
+      "teamCode": "CLINIC-JUL-09",
+      "baseArea": "ผฮล.(ต3)",
+      "crewType": "33 kV",
+      "displayOrder": 9,
+      "assignments": [
+        { "assignmentType": "field", "startDate": "2026-07-01", "endDate": "2026-07-03", "destination": "ยะลา" },
+        { "assignmentType": "field", "startDate": "2026-07-06", "endDate": "2026-07-08", "destination": "สตูล" },
+        { "assignmentType": "field", "startDate": "2026-07-13", "endDate": "2026-07-14", "destination": "หาดใหญ่", "note": "ผบอ." },
+        { "assignmentType": "field", "startDate": "2026-07-15", "endDate": "2026-07-18", "destination": "เบตง" },
+        { "assignmentType": "field", "startDate": "2026-07-20", "endDate": "2026-07-21", "destination": "รือเสาะ", "note": "ผบอ." },
+        { "assignmentType": "field", "startDate": "2026-07-22", "endDate": "2026-07-23", "destination": "พัทลุง", "note": "ระดมทีม" },
+        { "assignmentType": "field", "startDate": "2026-07-24", "endDate": "2026-07-24", "destination": "เทพา" }
+      ]
+    },
+    {
+      "teamCode": "CLINIC-JUL-10",
+      "baseArea": "ผฮล.(ต3)",
+      "crewType": "115 kV",
+      "displayOrder": 10,
+      "assignments": [
+        { "assignmentType": "field", "startDate": "2026-07-06", "endDate": "2026-07-08", "destination": "ยะลา" },
+        { "assignmentType": "field", "startDate": "2026-07-13", "endDate": "2026-07-17", "destination": "เทพา, หนองจิก" },
+        { "assignmentType": "field", "startDate": "2026-07-20", "endDate": "2026-07-21", "destination": "หนองจิก" },
+        { "assignmentType": "field", "startDate": "2026-07-22", "endDate": "2026-07-23", "destination": "พัทลุง", "note": "ระดมทีม" },
+        { "assignmentType": "field", "startDate": "2026-07-27", "endDate": "2026-07-28", "destination": "สตูล" },
+        { "assignmentType": "field", "startDate": "2026-07-29", "endDate": "2026-07-31", "destination": "ด่านนอก" }
+      ]
+    }
+  ]
+}

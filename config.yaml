@@ -25,6 +25,9 @@ jwt:
   access_token_expiry: 1h
   refresh_token_expiry: 168h # 7 days
 
+integration:
+  clinic_tool_key: ${CLINIC_TOOL_INTEGRATION_KEY}
+
 cors:
   allowed_origins:
     - http://localhost:3000

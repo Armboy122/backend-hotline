@@ -30,9 +30,14 @@ type Count struct {
 // === Team DTOs ===
 
 type TeamResponse struct {
-	ID    int64  `json:"id"`
-	Name  string `json:"name"`
-	Count *Count `json:"_count,omitempty"`
+	ID                 int64   `json:"id"`
+	Name               string  `json:"name"`
+	Code               *string `json:"code"`
+	BaseArea           *string `json:"baseArea"`
+	CrewType           *string `json:"crewType"`
+	DisplayOrder       int     `json:"displayOrder"`
+	MonthlyPlanVisible bool    `json:"monthlyPlanVisible"`
+	Count              *Count  `json:"_count,omitempty"`
 }
 
 // === JobType DTOs ===

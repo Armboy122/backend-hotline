@@ -55,7 +55,7 @@ func (c *Controller) Create(ctx *gin.Context) {
 		return
 	}
 
-	item, err := c.service.Create(ctx.Request.Context(), req.Name)
+	item, err := c.service.Create(ctx.Request.Context(), toUpsertInput(req))
 	if err != nil {
 		log.Printf("Failed to create team: %v", err)
 		ctx.JSON(http.StatusInternalServerError, dto.StandardResponse{
@@ -82,7 +82,7 @@ func (c *Controller) Update(ctx *gin.Context) {
 		return
 	}
 
-	item, err := c.service.Update(ctx.Request.Context(), id, req.Name)
+	item, err := c.service.Update(ctx.Request.Context(), id, toUpsertInput(req))
 	if err != nil {
 		writeError(ctx, err, "An error occurred while updating the team")
 		return
@@ -127,12 +127,33 @@ func writeError(ctx *gin.Context, err error, internalMessage string) {
 			Success: false,
 			Error:   errResp("NOT_FOUND", "Team not found"),
 		})
+	case errors.Is(err, entity.ErrInvalidInput):
+		ctx.JSON(http.StatusBadRequest, dto.StandardResponse{
+			Success: false,
+			Error:   errResp("VALIDATION_ERROR", "Invalid team input"),
+		})
+	case errors.Is(err, entity.ErrCodeImmutable):
+		ctx.JSON(http.StatusConflict, dto.StandardResponse{
+			Success: false,
+			Error:   errResp("TEAM_CODE_IMMUTABLE", err.Error()),
+		})
 	default:
 		log.Printf("Team request failed: %v", err)
 		ctx.JSON(http.StatusInternalServerError, dto.StandardResponse{
 			Success: false,
 			Error:   errResp("INTERNAL_ERROR", internalMessage),
 		})
+	}
+}
+
+func toUpsertInput(req dto.UpsertRequest) entity.UpsertInput {
+	return entity.UpsertInput{
+		Name:               req.Name,
+		Code:               req.Code,
+		BaseArea:           req.BaseArea,
+		CrewType:           req.CrewType,
+		DisplayOrder:       req.DisplayOrder,
+		MonthlyPlanVisible: req.MonthlyPlanVisible,
 	}
 }
 

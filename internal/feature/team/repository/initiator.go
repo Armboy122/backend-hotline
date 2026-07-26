@@ -14,8 +14,8 @@ import (
 type Repository interface {
 	List(ctx context.Context) ([]entity.Entity, error)
 	GetByID(ctx context.Context, id int64) (*entity.Entity, error)
-	Create(ctx context.Context, name string) (*entity.Entity, error)
-	Update(ctx context.Context, id int64, name string) (*entity.Entity, error)
+	Create(ctx context.Context, input entity.UpsertInput) (*entity.Entity, error)
+	Update(ctx context.Context, id int64, input entity.UpsertInput) (*entity.Entity, error)
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -59,8 +59,20 @@ func (r *repository) GetByID(ctx context.Context, id int64) (*entity.Entity, err
 	return &out, nil
 }
 
-func (r *repository) Create(ctx context.Context, name string) (*entity.Entity, error) {
-	model := models.Team{Name: name}
+func (r *repository) Create(ctx context.Context, input entity.UpsertInput) (*entity.Entity, error) {
+	model := models.Team{
+		Name:               input.Name,
+		Code:               input.Code,
+		BaseArea:           input.BaseArea,
+		CrewType:           input.CrewType,
+		MonthlyPlanVisible: true,
+	}
+	if input.DisplayOrder != nil {
+		model.DisplayOrder = *input.DisplayOrder
+	}
+	if input.MonthlyPlanVisible != nil {
+		model.MonthlyPlanVisible = *input.MonthlyPlanVisible
+	}
 	if err := r.db.WithContext(ctx).Create(&model).Error; err != nil {
 		return nil, err
 	}
@@ -68,7 +80,7 @@ func (r *repository) Create(ctx context.Context, name string) (*entity.Entity, e
 	return &out, nil
 }
 
-func (r *repository) Update(ctx context.Context, id int64, name string) (*entity.Entity, error) {
+func (r *repository) Update(ctx context.Context, id int64, input entity.UpsertInput) (*entity.Entity, error) {
 	var model models.Team
 	if err := r.db.WithContext(ctx).First(&model, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -76,8 +88,26 @@ func (r *repository) Update(ctx context.Context, id int64, name string) (*entity
 		}
 		return nil, err
 	}
-	model.Name = name
-	if err := r.db.WithContext(ctx).Save(&model).Error; err != nil {
+	updates := map[string]any{"name": input.Name}
+	if input.Code != nil {
+		updates["code"] = input.Code
+	}
+	if input.BaseArea != nil {
+		updates["base_area"] = input.BaseArea
+	}
+	if input.CrewType != nil {
+		updates["crew_type"] = input.CrewType
+	}
+	if input.DisplayOrder != nil {
+		updates["display_order"] = *input.DisplayOrder
+	}
+	if input.MonthlyPlanVisible != nil {
+		updates["monthly_plan_visible"] = *input.MonthlyPlanVisible
+	}
+	if err := r.db.WithContext(ctx).Model(&model).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.WithContext(ctx).First(&model, id).Error; err != nil {
 		return nil, err
 	}
 	count := models.CountTasksFor(r.db.WithContext(ctx), models.TaskCol.TeamID, id)

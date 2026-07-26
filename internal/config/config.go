@@ -13,11 +13,12 @@ import (
 )
 
 type Config struct {
-	Server     ServerConfig     `mapstructure:"server"`
-	Database   DatabaseConfig   `mapstructure:"database"`
-	Cloudflare CloudflareConfig `mapstructure:"cloudflare"`
-	JWT        JWTConfig        `mapstructure:"jwt"`
-	CORS       CORSConfig       `mapstructure:"cors"`
+	Server      ServerConfig      `mapstructure:"server"`
+	Database    DatabaseConfig    `mapstructure:"database"`
+	Cloudflare  CloudflareConfig  `mapstructure:"cloudflare"`
+	JWT         JWTConfig         `mapstructure:"jwt"`
+	CORS        CORSConfig        `mapstructure:"cors"`
+	Integration IntegrationConfig `mapstructure:"integration"`
 }
 
 type ServerConfig struct {
@@ -60,6 +61,10 @@ type CORSConfig struct {
 	AllowedHeaders []string `mapstructure:"allowed_headers"`
 }
 
+type IntegrationConfig struct {
+	ClinicToolKey string `mapstructure:"clinic_tool_key"`
+}
+
 // LoadConfig reads the application configuration from config.yaml file.
 // It searches for the config file in the current directory and parent directories.
 // Values in config.yaml can reference environment variables using ${VAR_NAME} syntax.
@@ -97,6 +102,7 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 	config.Cloudflare.R2.AccessKeyID = expandEnv(config.Cloudflare.R2.AccessKeyID)
 	config.Cloudflare.R2.SecretAccessKey = expandEnv(config.Cloudflare.R2.SecretAccessKey)
 	config.JWT.Secret = expandEnv(config.JWT.Secret)
+	config.Integration.ClinicToolKey = expandEnv(config.Integration.ClinicToolKey)
 
 	// Expand CORS origins และกรอง empty string ออก
 	expanded := make([]string, 0, len(config.CORS.AllowedOrigins))

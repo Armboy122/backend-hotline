@@ -239,8 +239,13 @@ func (JobDetail) TableName() string {
 
 // Team - ทีมงาน
 type Team struct {
-	ID   int64  `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
-	Name string `gorm:"not null;column:name" json:"name"`
+	ID                 int64   `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	Name               string  `gorm:"not null;column:name" json:"name"`
+	Code               *string `gorm:"column:code;uniqueIndex:team_code_unique_idx" json:"code,omitempty"`
+	BaseArea           *string `gorm:"column:base_area" json:"baseArea,omitempty"`
+	CrewType           *string `gorm:"column:crew_type" json:"crewType,omitempty"`
+	DisplayOrder       int     `gorm:"not null;default:0;column:display_order;index:team_monthly_plan_order_idx,priority:2" json:"displayOrder"`
+	MonthlyPlanVisible bool    `gorm:"not null;default:true;column:monthly_plan_visible;index:team_monthly_plan_order_idx,priority:1" json:"monthlyPlanVisible"`
 
 	Tasks []TaskDaily `gorm:"foreignKey:TeamID" json:"tasks,omitempty"`
 }
@@ -459,20 +464,20 @@ func (ExternalContact) TableName() string {
 
 // User - ผู้ใช้งานระบบ
 type User struct {
-	ID          uint       `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
-	Username    string     `gorm:"not null;unique;column:username" json:"username"`
-	Password    string     `gorm:"not null;column:password" json:"-"`
-	Role        string     `gorm:"not null;default:user;column:role" json:"role"`
-	TeamID      *int64     `gorm:"column:teamId;index:User_teamId_idx" json:"teamId,omitempty"`
-	DisplayName *string    `gorm:"column:displayName" json:"displayName,omitempty"`
-	Position    *string    `gorm:"column:position" json:"position,omitempty"`
-	PhoneNumber *string    `gorm:"column:phoneNumber" json:"phoneNumber,omitempty"`
-	IsActive    bool       `gorm:"not null;default:true;column:isActive" json:"isActive"`
-	MustChangePassword bool `gorm:"not null;default:false;column:must_change_password" json:"mustChangePassword"`
-	LastLogin   *time.Time `gorm:"column:lastLogin" json:"lastLogin,omitempty"`
-	CreatedAt   time.Time  `gorm:"not null;type:timestamptz(6);column:createdAt;default:CURRENT_TIMESTAMP" json:"createdAt"`
-	UpdatedAt   time.Time  `gorm:"not null;type:timestamptz(6);column:updatedAt" json:"updatedAt"`
-	DeletedAt   *time.Time `gorm:"type:timestamptz(6);column:deletedAt" json:"deletedAt,omitempty"`
+	ID                 uint       `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	Username           string     `gorm:"not null;unique;column:username" json:"username"`
+	Password           string     `gorm:"not null;column:password" json:"-"`
+	Role               string     `gorm:"not null;default:user;column:role" json:"role"`
+	TeamID             *int64     `gorm:"column:teamId;index:User_teamId_idx" json:"teamId,omitempty"`
+	DisplayName        *string    `gorm:"column:displayName" json:"displayName,omitempty"`
+	Position           *string    `gorm:"column:position" json:"position,omitempty"`
+	PhoneNumber        *string    `gorm:"column:phoneNumber" json:"phoneNumber,omitempty"`
+	IsActive           bool       `gorm:"not null;default:true;column:isActive" json:"isActive"`
+	MustChangePassword bool       `gorm:"not null;default:false;column:must_change_password" json:"mustChangePassword"`
+	LastLogin          *time.Time `gorm:"column:lastLogin" json:"lastLogin,omitempty"`
+	CreatedAt          time.Time  `gorm:"not null;type:timestamptz(6);column:createdAt;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt          time.Time  `gorm:"not null;type:timestamptz(6);column:updatedAt" json:"updatedAt"`
+	DeletedAt          *time.Time `gorm:"type:timestamptz(6);column:deletedAt" json:"deletedAt,omitempty"`
 
 	Team         *Team            `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
 	Capabilities []UserCapability `gorm:"foreignKey:UserID;references:ID" json:"capabilities,omitempty"`
@@ -514,6 +519,68 @@ type MonthlyPlan struct {
 // TableName กำหนดชื่อตารางใน database
 func (MonthlyPlan) TableName() string {
 	return "MonthlyPlan"
+}
+
+const (
+	MonthlyPlanScheduleStatusDraft      = "draft"
+	MonthlyPlanScheduleStatusPublished  = "published"
+	MonthlyPlanScheduleStatusSuperseded = "superseded"
+
+	MonthlyPlanAssignmentTypeField   = "field"
+	MonthlyPlanAssignmentTypeRemote  = "remote"
+	MonthlyPlanAssignmentTypeSupport = "support"
+	MonthlyPlanAssignmentTypeSpecial = "special"
+
+	MonthlyPlanAssignmentSourceManual       = "manual"
+	MonthlyPlanAssignmentSourceLargeWork    = "large_work"
+	MonthlyPlanAssignmentSourceApprovedFile = "approved_file"
+)
+
+// MonthlyPlanScheduleRevision is an immutable publication unit for a monthly
+// team schedule. Draft revisions may be replaced until they are published.
+type MonthlyPlanScheduleRevision struct {
+	ID                int64      `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	MonthlyPlanID     int64      `gorm:"not null;column:monthly_plan_id;uniqueIndex:monthly_plan_schedule_revision_no_idx,priority:1;index:monthly_plan_schedule_status_idx,priority:1" json:"monthlyPlanId"`
+	RevisionNo        int        `gorm:"not null;column:revision_no;uniqueIndex:monthly_plan_schedule_revision_no_idx,priority:2" json:"revisionNo"`
+	Status            string     `gorm:"not null;column:status;index:monthly_plan_schedule_status_idx,priority:2" json:"status"`
+	CreatedByUserID   int64      `gorm:"not null;column:created_by_user_id" json:"createdByUserId"`
+	PublishedByUserID *int64     `gorm:"column:published_by_user_id" json:"publishedByUserId,omitempty"`
+	PublishedAt       *time.Time `gorm:"type:timestamptz(6);column:published_at" json:"publishedAt,omitempty"`
+	Checksum          *string    `gorm:"column:checksum" json:"checksum,omitempty"`
+	Projection        []byte     `gorm:"type:jsonb;column:projection" json:"projection,omitempty"`
+	CreatedAt         time.Time  `gorm:"not null;type:timestamptz(6);column:created_at;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt         time.Time  `gorm:"not null;type:timestamptz(6);column:updated_at" json:"updatedAt"`
+
+	MonthlyPlan *MonthlyPlan                `gorm:"foreignKey:MonthlyPlanID;references:ID" json:"monthlyPlan,omitempty"`
+	Assignments []MonthlyPlanTeamAssignment `gorm:"foreignKey:RevisionID" json:"assignments,omitempty"`
+}
+
+func (MonthlyPlanScheduleRevision) TableName() string {
+	return "monthly_plan_schedule_revisions"
+}
+
+// MonthlyPlanTeamAssignment stores one continuous away/support segment for a
+// team. Home periods are deliberately derived from gaps at projection time.
+type MonthlyPlanTeamAssignment struct {
+	ID             int64     `gorm:"primaryKey;autoIncrement;column:id" json:"id"`
+	RevisionID     int64     `gorm:"not null;column:revision_id;index:monthly_plan_assignment_team_date_idx,priority:1" json:"revisionId"`
+	TeamID         int64     `gorm:"not null;column:team_id;index:monthly_plan_assignment_team_date_idx,priority:2" json:"teamId"`
+	AssignmentType string    `gorm:"not null;column:assignment_type" json:"assignmentType"`
+	StartDate      time.Time `gorm:"not null;type:date;column:start_date;index:monthly_plan_assignment_team_date_idx,priority:3" json:"startDate"`
+	EndDate        time.Time `gorm:"not null;type:date;column:end_date" json:"endDate"`
+	Destination    string    `gorm:"not null;column:destination" json:"destination"`
+	Note           *string   `gorm:"column:note" json:"note,omitempty"`
+	SourceType     string    `gorm:"not null;default:manual;column:source_type" json:"sourceType"`
+	SourceID       *int64    `gorm:"column:source_id" json:"sourceId,omitempty"`
+	CreatedAt      time.Time `gorm:"not null;type:timestamptz(6);column:created_at;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	UpdatedAt      time.Time `gorm:"not null;type:timestamptz(6);column:updated_at" json:"updatedAt"`
+
+	Revision *MonthlyPlanScheduleRevision `gorm:"foreignKey:RevisionID;references:ID" json:"revision,omitempty"`
+	Team     *Team                        `gorm:"foreignKey:TeamID;references:ID" json:"team,omitempty"`
+}
+
+func (MonthlyPlanTeamAssignment) TableName() string {
+	return "monthly_plan_team_assignments"
 }
 
 // PlanFile - ไฟล์แผนงานที่อัพโหลดเข้าเดือน
